@@ -1233,20 +1233,31 @@ def main():
                         use_container_width=True
                     )
                     
-                    with st.expander("Preview JSON"):
+                    # Prepare JS-safe JSON string
+                    js_json = json_str.replace('\\', '\\\\').replace('`', '\\`')
+                    
+                    # Header with button
+                    json_header_html = f"""
+                    <div style="display: flex; justify-content: space-between; align-items: center; width: 100%; padding-bottom: 10px;">
+                        <span>Preview JSON</span>
+                        <button onclick="copyJson()" style="background-color: #2d5016; color: white; border: none; padding: 8px 16px; border-radius: 4px; cursor: pointer; font-size: 14px;">Copy JSON</button>
+                    </div>
+                    """
+                    
+                    # Script
+                    json_script = textwrap.dedent(f"""
+                    <script>
+                    function copyJson() {{
+                      navigator.clipboard.writeText(`{js_json}`).then(() => {{
+                        alert('Copied JSON to clipboard!');
+                      }});
+                    }}
+                    </script>
+                    """)
+                    
+                    with st.expander(json_header_html, expanded=True):
                         st.json(export_data)
-                        js_json = json_str.replace('\\', '\\\\').replace('`', '\\`')
-                        script_html = textwrap.dedent(f"""
-                            <script>
-                            function copyJson() {{
-                              navigator.clipboard.writeText(`{js_json}`).then(() => {{
-                                alert('Copied JSON to clipboard!');
-                              }});
-                            }}
-                            </script>
-                            <button onclick="copyJson()" style="background-color: #2d5016; color: white; border: none; padding: 8px 16px; border-radius: 4px; cursor: pointer; font-size: 14px;">Copy JSON</button>
-                        """)
-                        st.markdown(script_html, unsafe_allow_html=True)
+                        st.markdown(json_script, unsafe_allow_html=True)
                 
                 else:
                     # Markdown export
@@ -1289,20 +1300,31 @@ def main():
                         use_container_width=True
                     )
                     
-                    with st.expander("Preview Markdown"):
+                    # Prepare JS-safe Markdown string
+                    js_md = markdown_str.replace('\\', '\\\\').replace('`', '\\`')
+                    
+                    # Header with button
+                    md_header_html = f"""
+                    <div style="display: flex; justify-content: space-between; align-items: center; width: 100%; padding-bottom: 10px;">
+                        <span>Preview Markdown</span>
+                        <button onclick="copyMarkdown()" style="background-color: #2d5016; color: white; border: none; padding: 8px 16px; border-radius: 4px; cursor: pointer; font-size: 14px;">Copy Markdown</button>
+                    </div>
+                    """
+                    
+                    # Script
+                    md_script = textwrap.dedent(f"""
+                    <script>
+                    function copyMarkdown() {{
+                      navigator.clipboard.writeText(`{js_md}`).then(() => {{
+                        alert('Copied Markdown to clipboard!');
+                      }});
+                    }}
+                    </script>
+                    """)
+                    
+                    with st.expander(md_header_html, expanded=True):
                         st.markdown(markdown_str)
-                        js_md = markdown_str.replace('\\', '\\\\').replace('`', '\\`')
-                        script_html = textwrap.dedent(f"""
-                            <script>
-                            function copyMarkdown() {{
-                              navigator.clipboard.writeText(`{js_md}`).then(() => {{
-                                alert('Copied Markdown to clipboard!');
-                              }});
-                            }}
-                            </script>
-                            <button onclick="copyMarkdown()" style="background-color: #2d5016; color: white; border: none; padding: 8px 16px; border-radius: 4px; cursor: pointer; font-size: 14px;">Copy Markdown</button>
-                        """)
-                        st.markdown(script_html, unsafe_allow_html=True)
+                        st.markdown(md_script, unsafe_allow_html=True)
             else:
                 st.warning("Please select species in the Species List tab first")
 
