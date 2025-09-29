@@ -26,7 +26,7 @@ import io
 
 # Configure page
 st.set_page_config(
-    page_title="🌿 Botanical ID Workbench",
+    page_title="Botanical ID Workbench",
     page_icon="🌿",
     layout="wide",
     initial_sidebar_state="expanded"
@@ -382,7 +382,7 @@ def create_species_map(records, species_list, center_lat, center_lon):
     folium.Marker(
         [center_lat, center_lon],
         popup="Search Center",
-        icon=folium.Icon(color='red', icon='crosshairs')
+        icon=folium.Icon(color='red', icon='info-sign')
     ).add_to(m)
     
     # Color mapping for top species
@@ -464,6 +464,8 @@ def main():
                     st.session_state.species_data = species_data
                     st.session_state.all_records = all_records
                     st.session_state.selected_species = {}
+                    if 'species_selector' in st.session_state:
+                        del st.session_state.species_selector
                     st.rerun()
                 else:
                     st.error("Cannot proceed without e-Flora data. Please check your data files.")
@@ -516,7 +518,11 @@ def main():
         # Show example location on map
         st.subheader("📍 Search Location Preview")
         preview_map = folium.Map(location=[latitude, longitude], zoom_start=10)
-        folium.Marker([latitude, longitude], popup="Search Center").add_to(preview_map)
+        folium.Marker(
+            [latitude, longitude], 
+            popup="Search Center",
+            icon=folium.Icon(color='red', icon='info-sign')
+        ).add_to(preview_map)
         folium.Circle(
             location=[latitude, longitude],
             radius=radius_km * 1000,  # Convert to meters
@@ -540,47 +546,57 @@ def main():
             df = pd.DataFrame(st.session_state.species_data)
             df_display = df[['name', 'family', 'count', 'status_flag']].copy()
             df_display.columns = ['Species', 'Family', 'Records', 'Status']
+            st.dataframe(df_display)
             
-            # Selection controls
+            # Prepare options for multiselect (limit to 50 for performance)
+            species_list_limited = st.session_state.species_data[:50]
+            species_options = [
+                f"{sp['name']} - *{sp['family']}* ({sp['count']} record{'s' if sp['count'] != 1 else ''}){sp['status_flag']}"
+                for sp in species_list_limited
+            ]
+            
+            # Multiselect for species selection
+            selected_labels = st.multiselect(
+                "Select species for analysis:",
+                species_options,
+                key="species_selector",
+                format_func=lambda x: x
+            )
+            
+            # Map selected labels back to species names
+            selected_names = []
+            for label in selected_labels:
+                # Extract name from label (first part before ' - ')
+                name = label.split(' - ')[0]
+                selected_names.append(name)
+            
+            # Update session state for compatibility
+            st.session_state.selected_species = {name: True for name in selected_names}
+            
+            # Selection control buttons
             col1, col2, col3 = st.columns(3)
             with col1:
                 if st.button("Select All"):
-                    for species in st.session_state.species_data:
-                        st.session_state.selected_species[species['name']] = True
+                    st.session_state.species_selector = species_options
                     st.rerun()
             with col2:
                 if st.button("Deselect All"):
-                    st.session_state.selected_species = {}
+                    st.session_state.species_selector = []
                     st.rerun()
             with col3:
                 if st.button("Top 10 Only"):
-                    st.session_state.selected_species = {}
-                    for species in st.session_state.species_data[:10]:
-                        st.session_state.selected_species[species['name']] = True
+                    st.session_state.species_selector = species_options[:10]
                     st.rerun()
             
-            # Species selection with checkboxes
-            for i, species in enumerate(st.session_state.species_data[:50]):  # Limit display for performance
-                current_selection = st.session_state.selected_species.get(species['name'], False)
-                record_text = f"{species['count']} record{'s' if species['count'] != 1 else ''}"
-                label = f"{species['name']} - *{species['family']}* ({record_text}){species['status_flag']}"
-                
-                new_selection = st.checkbox(
-                    label,
-                    value=current_selection,
-                    key=f"species_{i}"
-                )
-                st.session_state.selected_species[species['name']] = new_selection
-            
             # Process selected species
-            selected_count = sum(st.session_state.selected_species.values())
+            selected_count = len(selected_names)
             if selected_count > 0:
                 st.info(f"Selected {selected_count} species for processing")
                 
                 if st.button("📊 Generate Analysis", type="primary"):
                     selected_species_data = [
                         sp for sp in st.session_state.species_data 
-                        if st.session_state.selected_species.get(sp['name'], False)
+                        if sp['name'] in selected_names
                     ]
                     
                     with st.spinner("Processing selected species..."):
@@ -637,7 +653,7 @@ def main():
                     longitude
                 )
                 st_folium(species_map, height=600, width=700)
-                st.info("🎯 Red crosshair = search center. Colored dots = species observations (top 10 species shown). Check the legend for species-color mapping.")
+                st.info("🎯 Red info icon = search center. Colored dots = species observations (top 10 species shown). Check the legend for species-color mapping.")
             else:
                 st.warning("Map data not available. Run search first.")
         
@@ -678,7 +694,7 @@ def main():
             
             selected_species_data = [
                 sp for sp in st.session_state.species_data 
-                if st.session_state.selected_species.get(sp['name'], False)
+                if sp['name'] in st.session_state.selected_species
             ]
             
             if selected_species_data:
