@@ -1124,7 +1124,15 @@ def main():
                     with st.spinner("Processing selected species..."):
                         st.subheader("🔍 Detailed Species Information")
                         
-                        for species in selected_species_data[:10]:
+                        # Pagination setup
+                        page_size = 10
+                        total_pages = math.ceil(len(selected_species_data) / page_size)
+                        page = st.slider("Page", 1, total_pages, 1, key="detail_page")
+                        start_idx = (page - 1) * page_size
+                        end_idx = start_idx + page_size
+                        paginated_species = selected_species_data[start_idx:end_idx]
+                        
+                        for species in paginated_species:
                             with st.expander(f"📋 {species['name']} - {species['family']} ({species['count']} records)", expanded=True):
                                 if include_images:
                                     col1, col2 = st.columns([3, 1])
