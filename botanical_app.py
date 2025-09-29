@@ -545,8 +545,10 @@ def format_species_name(name):
     parts = name.split()
     return f"{parts[0]} {parts[1]}" if len(parts) >= 2 else name
 
+@st.cache_data
 @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=1, max=10))
 def safe_gbif_backbone(name, kingdom='Plantae'):
+    """Cached and retried GBIF backbone lookup."""
     return gbif_species.name_backbone(name=name, kingdom=kingdom, verbose=False)
 
 # iNaturalist license codes and their meanings
@@ -740,97 +742,106 @@ def get_species_list_from_gbif(latitude, longitude, radius_km, taxon_name, recor
         return [], []
 
 def get_local_eflora_description(scientific_name, eflora_data):
-    """Get description from local e-Flora data with fuzzy matching."""
+    """
+    Get description from local e-Flora data, with synonym lookup via GBIF.
+    """
     if eflora_data is None:
         return False, "e-Flora data not available"
-    
-    clean_name = format_species_name(scientific_name)
-    
-    # Try exact match first
-    if clean_name in eflora_data.index:
-        matched_name = clean_name
-    else:
-        # Try fuzzy matching
-        matches = process.extractOne(clean_name, eflora_data.index, scorer=fuzz.token_sort_ratio)
-        if matches and matches[1] >= 90:  # 90% similarity threshold
-            matched_name = matches[0]
+
+    # --- Helper function to extract data for a given name ---
+    def extract_from_eflora(name_to_check, original_search_name=None):
+        matched_name = None
+        # Try exact match first
+        if name_to_check in eflora_data.index:
+            matched_name = name_to_check
         else:
-            return False, f"Species {clean_name} not found in local database"
-    
-    try:
-        # Retrieve the matched row
-        row = eflora_data.loc[matched_name]
-        descriptions = row['descriptions']
-        vernacular_raw = row['vernacularName']
-        full_scientific_name = row['scientificName']
-        
-        # Handle vernacular names safely
-        if isinstance(vernacular_raw, list):
-            vernacular_names = [str(n).strip() for n in vernacular_raw if pd.notna(n) and str(n).strip()]
-        elif isinstance(vernacular_raw, str):
-            vernacular_names = [vernacular_raw.strip()] if vernacular_raw.strip() else []
-        else:
+            # Try fuzzy matching
+            matches = process.extractOne(name_to_check, eflora_data.index, scorer=fuzz.token_sort_ratio)
+            if matches and matches[1] >= 90:  # 90% similarity threshold
+                matched_name = matches[0]
+
+        if not matched_name:
+            return None
+
+        try:
+            row = eflora_data.loc[matched_name]
+            descriptions = row['descriptions']
+            vernacular_raw = row['vernacularName']
+            full_scientific_name = row['scientificName']
+            
+            # Handle vernacular names
             vernacular_names = []
-        
-        # Check if descriptions is a valid dictionary
-        if not isinstance(descriptions, dict) or not descriptions:
-            return False, f"No description available for {clean_name}"
+            if isinstance(vernacular_raw, list):
+                vernacular_names = [str(n).strip() for n in vernacular_raw if pd.notna(n) and str(n).strip()]
+            
+            if not isinstance(descriptions, dict) or not descriptions:
+                return None
 
-        # Build description with priority sections
-        extracted_data = [f"**Scientific Name:** {full_scientific_name}"]
-        
-        if vernacular_names:
-            extracted_data.append(f"**Common Names:** {', '.join(vernacular_names[:5])}")
+            # Build description text
+            if original_search_name and original_search_name != full_scientific_name:
+                name_display = f"**Scientific Name:** {full_scientific_name} (Searched as: *{original_search_name}*)"
+            else:
+                name_display = f"**Scientific Name:** {full_scientific_name}"
+            
+            extracted_data = [name_display]
+            if vernacular_names:
+                extracted_data.append(f"**Common Names:** {', '.join(vernacular_names[:5])}")
 
-        # Priority sections in order of importance
-        priority_sections = [
-            "Morphological description", 
-            "Diagnostic characters", 
-            "Habitat", 
-            "Distribution",
-            "Morphology",
-            "Diagnostic",
-            "Description",
-            "Characters"
-        ]
-        
-        sections_added = 0
-        for section in priority_sections:
-            if section in descriptions and pd.notna(descriptions[section]):
-                desc_text = str(descriptions[section]).strip()
-                if desc_text and len(desc_text) > 10:
-                    extracted_data.append(f"**{section}:**\n{desc_text}")
-                    sections_added += 1
-                    if sections_added >= 4:
-                        break
-        
-        # If no priority sections found, add any available sections
-        if sections_added == 0:
-            for section, desc in descriptions.items():
-                if pd.notna(desc):
-                    desc_text = str(desc).strip()
+            priority_sections = ["Morphological description", "Diagnostic characters", "Habitat", "Distribution", "Morphology", "Diagnostic", "Description", "Characters"]
+            sections_added = 0
+            for section in priority_sections:
+                if section in descriptions and pd.notna(descriptions[section]):
+                    desc_text = str(descriptions[section]).strip()
                     if desc_text and len(desc_text) > 10:
                         extracted_data.append(f"**{section}:**\n{desc_text}")
                         sections_added += 1
-                        if sections_added >= 2:
-                            break
-        
-        if sections_added == 0:
-            return False, f"No detailed descriptions available for {clean_name}"
-
-        # Add e-Flora citation
-        extracted_data.append(
-            "\n**Citation:** e-Flora of South Africa. v1.42. 2023. South African National Biodiversity Institute. http://ipt.sanbi.org.za/iptsanbi/resource?r=flora_descriptions&v=1.42"
-        )
-        extracted_data.append(
-            "**License:** CC-BY 4.0"
-        )
+                        if sections_added >= 4: break
             
-        return True, "\n\n".join(extracted_data)
-        
+            if sections_added == 0:
+                for section, desc in descriptions.items():
+                    if pd.notna(desc) and len(str(desc).strip()) > 10:
+                        extracted_data.append(f"**{section}:**\n{str(desc).strip()}")
+                        sections_added += 1
+                        if sections_added >= 2: break
+            
+            if sections_added == 0:
+                return None
+
+            # Add citation
+            extracted_data.append("\n**Citation:** e-Flora of South Africa. v1.42. 2023. South African National Biodiversity Institute. http://ipt.sanbi.org.za/iptsanbi/resource?r=flora_descriptions&v=1.42")
+            extracted_data.append("**License:** CC-BY 4.0")
+            
+            return "\n\n".join(extracted_data)
+        except Exception:
+            return None
+
+    # --- Main Logic ---
+    # 1. Try direct lookup with the original name
+    clean_name = format_species_name(scientific_name)
+    result = extract_from_eflora(clean_name)
+    
+    if result:
+        return True, result
+
+    # 2. If direct lookup fails, check GBIF for synonyms
+    try:
+        backbone_info = safe_gbif_backbone(scientific_name)
+        is_synonym = backbone_info.get('synonym', False)
+        accepted_name_str = backbone_info.get('acceptedScientificName')
+
+        if is_synonym and accepted_name_str:
+            st.info(f"'{scientific_name}' is a synonym. Trying accepted name: '{accepted_name_str}'...")
+            clean_accepted_name = format_species_name(accepted_name_str)
+            
+            # 3. Try lookup with the accepted name
+            result = extract_from_eflora(clean_accepted_name, original_search_name=scientific_name)
+            if result:
+                return True, result
     except Exception as e:
-        st.error(f"Error processing {clean_name}: {e}")
-        return False, f"Error retrieving data for {clean_name}"
+        logger.error(f"GBIF backbone lookup failed for {scientific_name}: {e}")
+
+    # 4. If all lookups fail
+    return False, f"No description available for {scientific_name} or its accepted synonym."
 
 def create_species_map(records, species_list, center_lat, center_lon):
     """Create an interactive map with species observations."""
@@ -1006,6 +1017,8 @@ def main():
                     import shutil
                     shutil.rmtree(cache_dir)
             st.success("Cache cleared!")
+            st.cache_data.clear()
+            st.cache_resource.clear()
     
     # Main content area
     if st.session_state.species_data is None:
@@ -1063,203 +1076,4 @@ def main():
             with col1:
                 if st.button("Select All", use_container_width=True):
                     st.session_state.species_selector = st.session_state.species_options[:]
-                    st.rerun()
-            with col2:
-                if st.button("Clear Selection", use_container_width=True):
-                    st.session_state.species_selector = []
-                    st.rerun()
-            with col3:
-                if st.button("Top 10", use_container_width=True):
-                    st.session_state.species_selector = st.session_state.species_options[:10]
-                    st.rerun()
-            
-            # Multiselect for species selection
-            selected_labels = st.multiselect(
-                "Select species:",
-                st.session_state.species_options,
-                key="species_selector",
-                format_func=lambda x: x
-            )
-            
-            # Map selected labels back to species names
-            selected_names = []
-            for label in selected_labels:
-                name = label.split(' - ')[0]
-                selected_names.append(name)
-            
-            st.session_state.selected_species = {name: True for name in selected_names}
-            
-            # Process selected species
-            if len(selected_names) > 0:
-                st.info(f"Selected {len(selected_names)} species for analysis")
-                
-                if st.button("📊 Generate Detailed Analysis", type="primary", use_container_width=True):
-                    selected_species_data = [
-                        sp for sp in st.session_state.species_data 
-                        if sp['name'] in selected_names
-                    ]
-                    
-                    with st.spinner("Processing selected species..."):
-                        st.subheader("🔍 Detailed Species Information")
-                        
-                        for species in selected_species_data[:10]:
-                            with st.expander(f"📋 {species['name']} - {species['family']} ({species['count']} records)", expanded=True):
-                                if include_images:
-                                    col1, col2 = st.columns([3, 1])
-                                else:
-                                    col1 = st.columns([1])[0]
-                                
-                                with col1:
-                                    # Get description
-                                    success, description = get_local_eflora_description(
-                                        species['name'], st.session_state.eflora_data
-                                    )
-                                    
-                                    if success:
-                                        st.markdown(description)
-                                    else:
-                                        st.warning(f"No local description available")
-                                        st.markdown(f"**Scientific Name:** {species['name']}")
-                                        st.markdown(f"**Family:** {species['family']}")
-                                        st.markdown(f"**GBIF Records:** {species['count']}")
-                                
-                                if include_images:
-                                    with col2:
-                                        # Display iNaturalist images with attribution
-                                        with st.spinner("Loading images..."):
-                                            images_data, taxon_id = get_species_images(species['name'])
-                                            
-                                            if images_data:
-                                                st.markdown("**Photos from iNaturalist:**")
-                                                for img_data in images_data[:3]:  # Limit to 3 images
-                                                    try:
-                                                        response = requests.get(img_data['url'], timeout=10)
-                                                        img = Image.open(io.BytesIO(response.content))
-                                                        
-                                                        # Display image with caption
-                                                        st.image(img, caption=img_data['caption'], 
-                                                               use_container_width=True)
-                                                        
-                                                        st.markdown(" ")
-                                                        
-                                                    except Exception as e:
-                                                        st.warning(f"Failed to load image")
-                                                
-                                                # Link to iNaturalist
-                                                if taxon_id:
-                                                    inat_link = f"https://www.inaturalist.org/taxa/{taxon_id}"
-                                                    st.markdown(f"[View on iNaturalist ↗]({inat_link})")
-                                            else:
-                                                st.info("No photos available")
-        
-        with tab2:
-            st.subheader("🗺️ Species Distribution Map")
-            if hasattr(st.session_state, 'all_records'):
-                species_map = create_species_map(
-                    st.session_state.all_records,
-                    st.session_state.species_data,
-                    latitude,
-                    longitude
-                )
-                st_folium(species_map, height=600, width=700)
-                st.info("🎯 Red marker = search center | Colored dots = species observations")
-            else:
-                st.warning("Map data not available")
-        
-        with tab3:
-            st.subheader("📄 Export Data")
-            
-            selected_species_data = [
-                sp for sp in st.session_state.species_data 
-                if sp['name'] in st.session_state.selected_species
-            ]
-            
-            if selected_species_data:
-                if export_format == "JSON":
-                    # JSON export
-                    export_data = {
-                        "metadata": {
-                            "location": {"latitude": latitude, "longitude": longitude},
-                            "radius_km": radius_km,
-                            "taxon_searched": taxon_name,
-                            "selected_species_count": len(selected_species_data),
-                            "timestamp": datetime.now().isoformat()
-                        },
-                        "species": []
-                    }
-                    
-                    for species in selected_species_data:
-                        success, description = get_local_eflora_description(
-                            species['name'], st.session_state.eflora_data
-                        )
-                        
-                        export_data["species"].append({
-                            "name": species['name'],
-                            "family": species['family'],
-                            "gbif_count": species['count'],
-                            "description": description if success else "No description available"
-                        })
-                    
-                    json_str = json.dumps(export_data, indent=2)
-                    st.download_button(
-                        label="📥 Download JSON",
-                        data=json_str,
-                        file_name=f"botanical_data_{datetime.now().strftime('%Y%m%d_%H%M')}.json",
-                        mime="application/json",
-                        use_container_width=True
-                    )
-                    
-                    with st.expander("Preview JSON"):
-                        st.json(export_data)
-                
-                else:
-                    # Markdown export
-                    markdown_parts = [
-                        f"# Botanical Identification Report",
-                        f"",
-                        f"**Location:** {latitude}, {longitude}",
-                        f"**Search Radius:** {radius_km} km",
-                        f"**Target Taxon:** {taxon_name}",
-                        f"**Generated:** {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}",
-                        f"**Selected Species:** {len(selected_species_data)}",
-                        f"",
-                        f"## Species Details",
-                        f""
-                    ]
-                    
-                    for species in selected_species_data:
-                        success, description = get_local_eflora_description(
-                            species['name'], st.session_state.eflora_data
-                        )
-                        
-                        markdown_parts.extend([
-                            f"### {species['name']}",
-                            f"**Family:** {species['family']}",
-                            f"**GBIF Records:** {species['count']}",
-                            f"",
-                            description if success else "No description available.",
-                            f"",
-                            "---",
-                            f""
-                        ])
-                    
-                    markdown_str = "\n".join(markdown_parts)
-                    
-                    st.download_button(
-                        label="📥 Download Markdown Report",
-                        data=markdown_str,
-                        file_name=f"botanical_report_{datetime.now().strftime('%Y%m%d_%H%M')}.md",
-                        mime="text/markdown",
-                        use_container_width=True
-                    )
-                    
-                    with st.expander("Preview Markdown"):
-                        st.markdown(markdown_str)
-            else:
-                st.warning("Please select species in the Species List tab first")
-
-    # Add footer
-    add_footer()
-
-if __name__ == "__main__":
-    main()
+   
