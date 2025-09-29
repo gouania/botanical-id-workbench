@@ -27,7 +27,7 @@ import urllib.parse
 
 # Configure page with botanical theme
 st.set_page_config(
-    page_title="Botanical ID Workbench",
+    page_title="Botanical Identification Workbench (South Africa edition)",
     page_icon="🌿",
     layout="wide",
     initial_sidebar_state="expanded"
@@ -927,7 +927,7 @@ def add_footer():
 
 # Main Streamlit App
 def main():
-    st.title("🌿 Botanical Identification Workbench")
+    st.title("🌿 Botanical Identification Workbench (South Africa edition)")
     st.markdown("*Advanced species identification using GBIF data and local flora databases*")
     
     # Sidebar for parameters
@@ -1047,13 +1047,14 @@ def main():
         st.session_state.species_options = species_options
         
         # Create tabs for different views
-        tab1, tab2, tab3, tab4 = st.tabs(["📊 Species List", "🗺️ Map View", "📈 Analysis", "📄 Export"])
+        tab1, tab2, tab3 = st.tabs(["📊 Species List", "🗺️ Map View", "📄 Export"])
         
         with tab1:
             st.subheader("Species Found in Search Area")
             
             # Create DataFrame for display
             df = pd.DataFrame(st.session_state.species_data)
+            df = df[df['name'].str.strip() != '']
             df_display = df[['name', 'family', 'count']].copy()
             df_display.columns = ['Species', 'Family', 'Records']
             st.dataframe(df_display, use_container_width=True, height=300)
@@ -1142,14 +1143,6 @@ def main():
                                                         st.image(img, caption=img_data['caption'], 
                                                                use_container_width=True)
                                                         
-                                                        # Add attribution below image
-                                                        st.markdown(f"""
-                                                        <div class="photo-attribution">
-                                                            📷 {img_data['photographer']}<br>
-                                                            📜 {img_data['license']}
-                                                        </div>
-                                                        """, unsafe_allow_html=True)
-                                                        
                                                         st.markdown(" ")
                                                         
                                                     except Exception as e:
@@ -1177,50 +1170,6 @@ def main():
                 st.warning("Map data not available")
         
         with tab3:
-            st.subheader("📈 Search Statistics")
-            
-            if st.session_state.species_data:
-                # Summary metrics
-                col1, col2, col3, col4 = st.columns(4)
-                
-                total_species = len(st.session_state.species_data)
-                total_records = sum(sp['count'] for sp in st.session_state.species_data)
-                families = set(sp['family'] for sp in st.session_state.species_data)
-                avg_records = total_records / total_species if total_species > 0 else 0
-                
-                col1.metric("Species Found", total_species)
-                col2.metric("Total Records", f"{total_records:,}")
-                col3.metric("Families", len(families))
-                col4.metric("Avg Records/Species", f"{avg_records:.1f}")
-                
-                # Top families chart
-                family_counts = {}
-                for species in st.session_state.species_data:
-                    family = species['family']
-                    family_counts[family] = family_counts.get(family, 0) + 1
-                
-                if family_counts:
-                    top_families = sorted(family_counts.items(), key=lambda x: x[1], reverse=True)[:10]
-                    families_df = pd.DataFrame(top_families, columns=['Family', 'Species Count'])
-                    
-                    fig = px.bar(
-                        families_df, 
-                        x='Species Count', 
-                        y='Family', 
-                        orientation='h',
-                        title="Top 10 Families by Species Count",
-                        color_discrete_sequence=['#5a7c3d']
-                    )
-                    fig.update_layout(
-                        height=400,
-                        plot_bgcolor='#fafafa',
-                        paper_bgcolor='white',
-                        font=dict(color='#1a1a1a'),
-                        title=dict(font=dict(color='#1a3d07'))
-                    )
-                    st.plotly_chart(fig, use_container_width=True)
-        
-        with tab4:
             st.subheader("📄 Export Data")
             
             selected_species_data = [
