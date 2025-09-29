@@ -453,6 +453,8 @@ if 'selected_species' not in st.session_state:
     st.session_state.selected_species = {}
 if 'eflora_data' not in st.session_state:
     st.session_state.eflora_data = None
+if 'analysis_data' not in st.session_state:
+    st.session_state.analysis_data = None
 
 # Caching decorator
 def file_cache(cache_dir="cache"):
@@ -991,6 +993,8 @@ def main():
                     st.session_state.selected_species = {}
                     if 'species_selector' in st.session_state:
                         del st.session_state.species_selector
+                    if 'analysis_data' in st.session_state:
+                        del st.session_state.analysis_data
                     st.rerun()
                 else:
                     st.error("Cannot proceed without e-Flora data. Please check your data files.")
@@ -1089,6 +1093,9 @@ def main():
             with col2:
                 if st.button("Clear Selection", use_container_width=True):
                     st.session_state.species_selector = []
+                    st.session_state.selected_species = {}
+                    if 'analysis_data' in st.session_state:
+                        del st.session_state.analysis_data
                     st.rerun()
             with col3:
                 if st.button("Top 10", use_container_width=True):
@@ -1120,70 +1127,72 @@ def main():
                         sp for sp in st.session_state.species_data 
                         if sp['name'] in selected_names
                     ]
+                    st.session_state.analysis_data = selected_species_data
+                
+                # Display detailed analysis if generated
+                if 'analysis_data' in st.session_state and st.session_state.analysis_data is not None:
+                    st.subheader("🔍 Detailed Species Information")
                     
-                    with st.spinner("Processing selected species..."):
-                        st.subheader("🔍 Detailed Species Information")
-                        
-                        # Pagination setup
-                        page_size = 10
-                        total_pages = math.ceil(len(selected_species_data) / page_size)
-                        page = st.slider("Page", 1, total_pages, 1, key="detail_page")
-                        start_idx = (page - 1) * page_size
-                        end_idx = start_idx + page_size
-                        paginated_species = selected_species_data[start_idx:end_idx]
-                        
-                        for species in paginated_species:
-                            with st.expander(f"📋 {species['name']} - {species['family']} ({species['count']} records)", expanded=True):
-                                if include_images:
-                                    col1, col2 = st.columns([3, 1])
+                    # Pagination setup
+                    page_size = 10
+                    total_pages = math.ceil(len(st.session_state.analysis_data) / page_size)
+                    page = st.slider("Page", 1, total_pages, 1, key="detail_page")
+                    start_idx = (page - 1) * page_size
+                    end_idx = start_idx + page_size
+                    paginated_species = st.session_state.analysis_data[start_idx:end_idx]
+                    
+                    for species in paginated_species:
+                        with st.expander(f"📋 {species['name']} - {species['family']} ({species['count']} records)", expanded=True):
+                            if include_images:
+                                col1, col2 = st.columns([3, 1])
+                            else:
+                                col1 = st.columns([1])[0]
+                            
+                            with col1:
+                                # Get description
+                                success, description = get_local_eflora_description(
+                                    species['name'], st.session_state.eflora_data
+                                )
+                                
+                                if success:
+                                    st.markdown(description)
                                 else:
-                                    col1 = st.columns([1])[0]
-                                
-                                with col1:
-                                    # Get description
-                                    success, description = get_local_eflora_description(
-                                        species['name'], st.session_state.eflora_data
-                                    )
-                                    
-                                    if success:
-                                        st.markdown(description)
-                                    else:
-                                        st.warning(f"No local description available")
-                                        st.markdown(f"**Scientific Name:** {species['name']}")
-                                        st.markdown(f"**Family:** {species['family']}")
-                                        st.markdown(f"**GBIF Records:** {species['count']}")
-                                
-                                if include_images:
-                                    with col2:
-                                        # Display iNaturalist images with attribution
-                                        with st.spinner("Loading images..."):
-                                            images_data, taxon_id = get_species_images(species['name'])
+                                    st.warning(f"No local description available")
+                                    st.markdown(f"**Scientific Name:** {species['name']}")
+                                    st.markdown(f"**Family:** {species['family']}")
+                                    st.markdown(f"**GBIF Records:** {species['count']}")
+                            
+                            if include_images:
+                                with col2:
+                                    # Display iNaturalist images with attribution
+                                    with st.spinner("Loading images..."):
+                                        images_data, taxon_id = get_species_images(species['name'])
+                                        
+                                        if images_data:
+                                            st.markdown("**Photos from iNaturalist:**")
+                                            for img_data in images_data[:3]:  # Limit to 3 images
+                                                try:
+                                                    response = requests.get(img_data['url'], headers=INAT_HEADERS, timeout=10)
+                                                    if response.status_code != 200:
+                                                        st.warning(f"Failed to load image (HTTP {response.status_code})")
+                                                        continue
+                                                    img = Image.open(io.BytesIO(response.content))
+                                                    
+                                                    # Display image with caption
+                                                    st.image(img, caption=img_data['caption'], 
+                                                           use_container_width=True)
+                                                    
+                                                    st.markdown(" ")
+                                                    
+                                                except Exception as e:
+                                                    st.warning(f"Failed to load image: {str(e)[:100]}")  # Truncate long errors
                                             
-                                            if images_data:
-                                                st.markdown("**Photos from iNaturalist:**")
-                                                for img_data in images_data[:3]:  # Limit to 3 images
-                                                    try:
-                                                        response = requests.get(img_data['url'], headers=INAT_HEADERS, timeout=10)
-                                                        if response.status_code != 200:
-                                                            st.warning(f"Failed to load image (HTTP {response.status_code})")
-                                                            continue
-                                                        img = Image.open(io.BytesIO(response.content))
-                                                        
-                                                        # Display image with caption
-                                                        st.image(img, caption=img_data['caption'], 
-                                                               use_container_width=True)
-                                                        
-                                                        st.markdown(" ")
-                                                        
-                                                    except Exception as e:
-                                                        st.warning(f"Failed to load image: {str(e)[:100]}")  # Truncate long errors
-                                                
-                                                # Link to iNaturalist
-                                                if taxon_id:
-                                                    inat_link = f"https://www.inaturalist.org/taxa/{taxon_id}"
-                                                    st.markdown(f"[View on iNaturalist ↗]({inat_link})")
-                                            else:
-                                                st.info("No photos available")
+                                            # Link to iNaturalist
+                                            if taxon_id:
+                                                inat_link = f"https://www.inaturalist.org/taxa/{taxon_id}"
+                                                st.markdown(f"[View on iNaturalist ↗]({inat_link})")
+                                        else:
+                                            st.info("No photos available")
         
         with tab2:
             st.subheader("🗺️ Species Distribution Map")
@@ -1202,10 +1211,14 @@ def main():
         with tab3:
             st.subheader("📄 Export Data")
             
-            selected_species_data = [
-                sp for sp in st.session_state.species_data 
-                if sp['name'] in st.session_state.selected_species
-            ]
+            # Use analysis_data if available, otherwise current selection
+            if 'analysis_data' in st.session_state and st.session_state.analysis_data:
+                selected_species_data = st.session_state.analysis_data
+            else:
+                selected_species_data = [
+                    sp for sp in st.session_state.species_data 
+                    if sp['name'] in st.session_state.selected_species
+                ]
             
             if selected_species_data:
                 if export_format == "JSON":
