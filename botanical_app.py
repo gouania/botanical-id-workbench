@@ -350,7 +350,7 @@ def get_species_images(species_name, limit=5):
 
 @file_cache(cache_dir="gbif_cache", ttl_hours=48)
 def get_species_list_from_gbif(latitude, longitude, radius_km, taxon_name, record_limit=50000):
-    """Optimized GBIF query with WKT POLYGON and correct boolean formatting."""
+    """Optimized GBIF query with bounding box (reverted from WKT for compatibility)."""
     try:
         # Backbone match
         taxon_info = safe_gbif_backbone(taxon_name)
@@ -369,14 +369,13 @@ def get_species_list_from_gbif(latitude, longitude, radius_km, taxon_name, recor
         min_lat, max_lat = latitude - lat_offset, latitude + lat_offset
         min_lon, max_lon = longitude - lon_offset, longitude + lon_offset
 
-        # Define search area using Well-Known Text (WKT) POLYGON for robustness.
-        wkt_polygon = f'POLYGON(({min_lon} {min_lat}, {max_lon} {min_lat}, {max_lon} {max_lat}, {min_lon} {max_lat}, {min_lon} {min_lat}))'
-
+        # Use bounding box strings (compatible with working old version)
         params = {
             'taxonKey': search_taxon_key,
-            'geometry': wkt_polygon,
-            'hasCoordinate': True,      # Fixed: Native Python boolean
-            'hasGeospatialIssue': False, # Fixed: Native Python boolean
+            'decimalLatitude': f'{min_lat},{max_lat}',
+            'decimalLongitude': f'{min_lon},{max_lon}',
+            'hasCoordinate': True,
+            'hasGeospatialIssue': False,
             'limit': 300
         }
 
