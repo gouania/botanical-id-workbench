@@ -7,9 +7,8 @@ import time
 import os
 import requests 
 import zipfile   
-from typing import Optional
+from typing import Optional, List, Dict, Tuple
 import json
-import requests
 from datetime import datetime
 import warnings
 import logging
@@ -124,8 +123,13 @@ def load_eflora_data() -> Optional[pd.DataFrame]:
         zip_path = os.path.join(DATA_DIR, "eflora_data.zip")
         with st.spinner(f"Downloading e-Flora data from SANBI (~16MB)... This is a one-time setup."):
             try:
+                # NEW: Define headers to mimic a browser
+                headers = {
+                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+                }
+                
                 # Download the ZIP file
-                with requests.get(EFLORA_ZIP_URL, stream=True) as r:
+                with requests.get(EFLORA_ZIP_URL, stream=True, headers=headers) as r:
                     r.raise_for_status()
                     with open(zip_path, 'wb') as f:
                         for chunk in r.iter_content(chunk_size=8192):
@@ -174,7 +178,7 @@ def load_eflora_data() -> Optional[pd.DataFrame]:
         ).reset_index(name='descriptions')
         
         vernacular_agg = vernacular_df.groupby('taxonID')['vernacularName'].apply(
-            lambda x: list(set(x.dropna()))
+            lambda x: list(set(str(n).strip() for n in x.dropna() if pd.notna(n) and str(n).strip()))
         ).reset_index()
         
         eflora_data = pd.merge(taxa_df, desc_agg, on='taxonID', how='left')
@@ -205,29 +209,27 @@ def safe_gbif_backbone(name, kingdom='Plantae'):
     return gbif_species.name_backbone(name=name, kingdom=kingdom, verbose=False)
 
 @st.cache_data
-def get_species_images(species_name, limit=5):
+def get_species_details(species_name: str, limit: int = 5, fetch_hierarchy: bool = True) -> Tuple[List[Dict], Optional[int], List[Dict]]:
     """
-    Fetch iNaturalist photos with proper attribution (photographer name and license).
-    Returns a list of photo dictionaries with URL, photographer, and license info.
+    Fetch iNat photos + taxonomic hierarchy.
+    Returns: (photos, taxon_id, ancestors)
     """
     try:
-        # Search for taxon ID
         encoded_name = urllib.parse.quote(species_name)
         search_url = f"https://api.inaturalist.org/v1/taxa/autocomplete?q={encoded_name}&per_page=1"
         response = requests.get(search_url, headers=INAT_HEADERS, timeout=10)
         
         if response.status_code != 200:
             logger.warning(f"API error for taxon search ({response.status_code}): {response.text[:200]}")
-            return [], None
+            return [], None, []
             
         data = response.json()
         
         if not data.get('results'):
-            return [], None
+            return [], None, []
             
         taxon = data['results'][0]
         if taxon.get('rank') != 'species':
-            # Try to find species-level taxon
             for result in data.get('results', []):
                 if result.get('rank') == 'species':
                     taxon = result
@@ -236,18 +238,13 @@ def get_species_images(species_name, limit=5):
         taxon_id = taxon['id']
         photos = []
         
-        # Get default photo if available
+        # Existing default_photo logic (unchanged)
         default_photo = taxon.get('default_photo')
         if default_photo:
             photo_url = default_photo.get('medium_url') or default_photo.get('square_url')
             if photo_url:
-                # Extract attribution from default photo
                 attribution = default_photo.get('attribution', '(c) Unknown photographer')
-                # Parse attribution string to extract photographer name
-                if attribution and '(c)' in attribution:
-                    photographer = attribution.split('(c)')[-1].split(',')[0].strip()
-                else:
-                    photographer = 'Unknown photographer'
+                photographer = attribution.split('(c)')[-1].split(',')[0].strip() if '(c)' in attribution else 'Unknown photographer'
                 
                 license_code = default_photo.get('license_code', '')
                 if license_code in ALLOWED_INAT_LICENSES:
@@ -259,7 +256,7 @@ def get_species_images(species_name, limit=5):
                         'caption': f"© {photographer} · {license_name}"
                     })
         
-        # Fetch observations with photos
+        # Existing observations logic (unchanged)
         obs_url = f"https://api.inaturalist.org/v1/observations?taxon_id={taxon_id}&photos=true&per_page={limit}&order_by=votes&order=desc"
         obs_response = requests.get(obs_url, headers=INAT_HEADERS, timeout=10)
         
@@ -269,22 +266,17 @@ def get_species_images(species_name, limit=5):
         obs_data = obs_response.json()
         
         for obs in obs_data.get('results', [])[:limit]:
-            # Get observation user (photographer)
             obs_user = obs.get('user', {})
             photographer_name = obs_user.get('name') or obs_user.get('login', 'Unknown')
             
-            for photo in obs.get('photos', [])[:1]:  # One photo per observation
+            for photo in obs.get('photos', [])[:1]:
                 photo_url = photo.get('url', '').replace('square', 'medium')
                 if not photo_url:
                     photo_url = photo.get('medium_url') or photo.get('square_url')
                 
                 if photo_url and photo_url not in [p['url'] for p in photos]:
-                    # Get photo-specific attribution if available
                     photo_attribution = photo.get('attribution', '')
-                    if photo_attribution and '(c)' in photo_attribution:
-                        photo_photographer = photo_attribution.split('(c)')[-1].split(',')[0].strip()
-                    else:
-                        photo_photographer = photographer_name
+                    photo_photographer = photo_attribution.split('(c)')[-1].split(',')[0].strip() if '(c)' in photo_attribution else photographer_name
                     
                     license_code = photo.get('license_code', '')
                     if license_code in ALLOWED_INAT_LICENSES:
@@ -303,11 +295,32 @@ def get_species_images(species_name, limit=5):
             if len(photos) >= limit:
                 break
         
-        return photos, taxon_id
+        # Fetch ancestors only if requested
+        ancestors = []
+        if fetch_hierarchy:
+            taxon_url = f"https://api.inaturalist.org/v1/taxa/{taxon_id}"
+            taxon_response = requests.get(taxon_url, headers=INAT_HEADERS, timeout=10)
+            if taxon_response.status_code == 200:
+                taxon_data = taxon_response.json().get('results', [{}])[0]
+                raw_ancestors = taxon_data.get('ancestors', [])
+                ancestors = sorted(
+                    [anc for anc in raw_ancestors if anc.get('rank')],
+                    key=lambda x: x.get('rank_level', 0), reverse=True  # Kingdom first
+                )
+                ancestors = [{'rank': anc['rank'], 'name': anc['name'], 'id': anc.get('id')} for anc in ancestors]  # Include ID for links
+        
+        return photos, taxon_id, ancestors
         
     except Exception as e:
-        logger.error(f"Error fetching iNat images for {species_name}: {e}")
-        return [], None
+        logger.error(f"Error fetching iNat details for {species_name}: {e}")
+        return [], None, []
+
+def filter_species_by_rank(species_data: List[Dict], rank: str, name: str) -> List[Dict]:
+    """Filter species where hierarchy has matching rank and name (case-insensitive)."""
+    return [sp for sp in species_data if any(
+        anc['rank'] == rank and anc['name'].lower() == name.lower()
+        for anc in sp.get('hierarchy', [])
+    )]
 
 @file_cache(cache_dir="gbif_cache")
 def get_species_list_from_gbif(latitude, longitude, radius_km, taxon_name, record_limit=50000):
@@ -360,6 +373,7 @@ def get_species_list_from_gbif(latitude, longitude, radius_km, taxon_name, recor
                 time.sleep(0.05)
                 
                 if len(all_records) >= 100000:
+                    st.warning("Search truncated at 100,000 records for performance.")
                     break
             except Exception as e:
                 st.error(f"Error fetching batch: {e}")
@@ -653,10 +667,17 @@ def main():
         taxon_name = st.text_input("Taxon Name", value="Protea",
                                    help="Scientific name of taxon to search (genus or higher)")
         
+        st.subheader("🔍 Filter by Rank")
+        rank_options = ["tribe", "subtribe", "subfamily", "genus", "species_group"]  # Common intermediates
+        selected_rank = st.selectbox("Select Rank", rank_options)
+        rank_name = st.text_input("Rank Name (e.g., Atripliceae)", placeholder="Leave blank to disable")
+
         # Options
         st.subheader("⚙️ Options")
         include_images = st.checkbox("Include Images", value=True,
                                      help="Fetch images from iNaturalist (slower but more informative)")
+        include_hierarchy = st.checkbox("Include Taxonomic Hierarchy", value=True,
+                                        help="Fetch hierarchy from iNaturalist (adds context but slower)")
         export_format = st.radio(
             "Export Format", 
             ["JSON", "Markdown"], # Set JSON as the default (first in list)
@@ -744,11 +765,24 @@ def main():
     else:
         # Display search results
         st.success(f"Found {len(st.session_state.species_data)} species in the search area")
+
+        # Apply rank filter if specified
+        filtered_data = st.session_state.species_data
+        if rank_name:  # From sidebar
+            # Fetch hierarchies for filtering (always, as filter requires it)
+            with st.spinner("Fetching taxonomic hierarchies for rank filtering..."):
+                for sp in st.session_state.species_data:
+                    _, _, ancestors = get_species_details(sp['name'], fetch_hierarchy=True)
+                    sp['hierarchy'] = ancestors
+            filtered_data = filter_species_by_rank(st.session_state.species_data, selected_rank, rank_name)
+            st.info(f"Filtered to {len(filtered_data)} species in {selected_rank}: {rank_name}")
+            if not include_hierarchy:
+                st.warning("Hierarchy fetched temporarily for rank filtering. It will be included in analysis/export unless disabled.")
         
-        # Prepare species options for multiselect
-        species_list_limited = st.session_state.species_data[:50]
+        # Prepare species options for multiselect based on filtered data
+        species_list_limited = filtered_data[:50]
         species_options = [
-            f"{sp['name']} - {sp['family']} ({sp['count']} records){sp['status_flag']}"
+            f"{sp['name']} - {sp['family']} ({sp['count']} records){sp.get('status_flag', '')}"
             for sp in species_list_limited
         ]
         st.session_state.species_options = species_options
@@ -760,7 +794,7 @@ def main():
             st.subheader("Species Found in Search Area")
             
             # Create DataFrame for display
-            df = pd.DataFrame(st.session_state.species_data)
+            df = pd.DataFrame(filtered_data)
             df = df[df['name'].str.strip() != '']
             df_display = df[['name', 'family', 'count']].copy()
             df_display.columns = ['Species', 'Family', 'Records']
@@ -810,10 +844,24 @@ def main():
                 
                 if st.button("📊 Generate Detailed Analysis", type="primary", use_container_width=True):
                     selected_species_data = [
-                        sp for sp in st.session_state.species_data 
+                        sp for sp in filtered_data 
                         if sp['name'] in selected_names
                     ]
-                    st.session_state.analysis_data = selected_species_data
+                    # Augment with details (including hierarchy only if option enabled)
+                    augmented_data = []
+                    with st.spinner(f"Fetching details for {len(selected_species_data)} species..."):
+                        for sp in selected_species_data:
+                            photos, taxon_id, ancestors = get_species_details(
+                                sp['name'], 
+                                fetch_hierarchy=include_hierarchy
+                            )  # Respect option here
+                            sp_copy = sp.copy()
+                            sp_copy['hierarchy'] = ancestors if include_hierarchy else []
+                            sp_copy['photos'] = photos  # Always store if images enabled, but fetch anyway
+                            sp_copy['taxon_id'] = taxon_id
+                            augmented_data.append(sp_copy)
+                    st.session_state.analysis_data = augmented_data
+                    st.rerun()
                 
                 # Display detailed analysis if generated
                 if 'analysis_data' in st.session_state:
@@ -839,13 +887,26 @@ def main():
                         
                         for species in paginated_species:
                             with st.expander(f"📋 {species['name']} - {species['family']} ({species['count']} records)", expanded=True):
+                                
+                                # Use pre-fetched details if available
+                                if 'hierarchy' in species and species['hierarchy']:
+                                    ancestors = species['hierarchy']
+                                    photos = species.get('photos', [])
+                                    taxon_id = species.get('taxon_id')
+                                else:
+                                    # Fallback fetch if needed (e.g., hierarchy disabled but now enabled)
+                                    photos, taxon_id, ancestors = get_species_details(
+                                        species['name'], 
+                                        fetch_hierarchy=include_hierarchy
+                                    )
+
                                 if include_images:
                                     col1, col2 = st.columns([3, 1])
                                 else:
                                     col1 = st.columns([1])[0]
                                 
                                 with col1:
-                                    # Get description
+                                    # Get local e-Flora description
                                     success, description = get_local_eflora_description(
                                         species['name'], st.session_state.eflora_data
                                     )
@@ -857,38 +918,40 @@ def main():
                                         st.markdown(f"**Scientific Name:** {species['name']}")
                                         st.markdown(f"**Family:** {species['family']}")
                                         st.markdown(f"**GBIF Records:** {species['count']}")
-                                
+
+                                    # Display hierarchy only if option enabled and available
+                                    if include_hierarchy and ancestors:
+                                        hierarchy_links = []
+                                        for anc in ancestors:
+                                            inat_link = f"https://www.inaturalist.org/taxa/{anc.get('id', '')}" if anc.get('id') else "#"
+                                            hierarchy_links.append(f"[{anc['name']} ({anc['rank']})]({inat_link})")
+                                        hierarchy_str = " > ".join(hierarchy_links)
+                                        st.markdown(f"**Taxonomic Hierarchy:** {hierarchy_str}")
+                                    elif include_hierarchy:
+                                        st.info("Taxonomic hierarchy could not be retrieved from iNaturalist.")
+
                                 if include_images:
                                     with col2:
-                                        # Display iNaturalist images with attribution
-                                        with st.spinner("Loading images..."):
-                                            images_data, taxon_id = get_species_images(species['name'])
+                                        # Display iNaturalist images (using the 'photos' variable)
+                                        if photos:
+                                            st.markdown("**Photos from iNaturalist:**")
+                                            for img_data in photos[:3]:  # Limit to 3 images
+                                                try:
+                                                    response = requests.get(img_data['url'], headers=INAT_HEADERS, timeout=10)
+                                                    if response.status_code != 200:
+                                                        st.warning(f"Failed to load image (HTTP {response.status_code})")
+                                                        continue
+                                                    img = Image.open(io.BytesIO(response.content))
+                                                    st.image(img, caption=img_data['caption'], use_container_width=True)
+                                                    st.markdown(" ")
+                                                except Exception as e:
+                                                    st.warning(f"Failed to load image: {str(e)[:100]}")
                                             
-                                            if images_data:
-                                                st.markdown("**Photos from iNaturalist:**")
-                                                for img_data in images_data[:3]:  # Limit to 3 images
-                                                    try:
-                                                        response = requests.get(img_data['url'], headers=INAT_HEADERS, timeout=10)
-                                                        if response.status_code != 200:
-                                                            st.warning(f"Failed to load image (HTTP {response.status_code})")
-                                                            continue
-                                                        img = Image.open(io.BytesIO(response.content))
-                                                        
-                                                        # Display image with caption
-                                                        st.image(img, caption=img_data['caption'],
-                                                               use_container_width=True)
-                                                        
-                                                        st.markdown(" ")
-                                                        
-                                                    except Exception as e:
-                                                        st.warning(f"Failed to load image: {str(e)[:100]}")
-                                                
-                                                # Link to iNaturalist
-                                                if taxon_id:
-                                                    inat_link = f"https://www.inaturalist.org/taxa/{taxon_id}"
-                                                    st.markdown(f"[View on iNaturalist ↗]({inat_link})")
-                                            else:
-                                                st.info("No photos available")
+                                            if taxon_id:
+                                                inat_link = f"https://www.inaturalist.org/taxa/{taxon_id}"
+                                                st.markdown(f"[View on iNaturalist ↗]({inat_link})")
+                                        else:
+                                            st.info("No photos available")
                     else:
                         # analysis_data exists but is empty or invalid
                         st.warning("No species data available for analysis. Please select species and click 'Generate Detailed Analysis'.")
@@ -915,7 +978,7 @@ def main():
                 selected_species_data = st.session_state.analysis_data
             else:
                 selected_species_data = [
-                    sp for sp in st.session_state.species_data 
+                    sp for sp in filtered_data 
                     if sp['name'] in st.session_state.selected_species
                 ]
             
@@ -942,6 +1005,7 @@ def main():
                             "name": species['name'],
                             "family": species['family'],
                             "gbif_count": species['count'],
+                            "hierarchy": species.get('hierarchy', []) if include_hierarchy else [],
                             "description": description if success else "No description available"
                         })
                     
@@ -978,11 +1042,17 @@ def main():
                             species['name'], st.session_state.eflora_data
                         )
                         
+                        # Add hierarchy to MD only if option enabled
+                        hierarchy_md = ""
+                        if include_hierarchy and species.get('hierarchy'):
+                            hierarchy_list = "\n".join([f"- [{anc['name']} ({anc['rank']})](https://www.inaturalist.org/taxa/{anc.get('id', '')})" for anc in species['hierarchy']])
+                            hierarchy_md = f"**Taxonomic Hierarchy:**\n{hierarchy_list}\n\n"
+
                         markdown_parts.extend([
                             f"### {species['name']}",
                             f"**Family:** {species['family']}",
                             f"**GBIF Records:** {species['count']}",
-                            f"",
+                            hierarchy_md,
                             description if success else "No description available.",
                             f"",
                             "---",

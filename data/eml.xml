@@ -1,0 +1,208 @@
+<eml:eml xmlns:eml="eml://ecoinformatics.org/eml-2.1.1"
+         xmlns:dc="http://purl.org/dc/terms/"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="eml://ecoinformatics.org/eml-2.1.1 http://rs.gbif.org/schema/eml-gbif-profile/1.1/eml.xsd"
+         packageId="https://ipt.sanbi.org.za/resource?id=flora_descriptions/v1.42" system="http://gbif.org" scope="system"
+         xml:lang="eng">
+
+<dataset>
+  <alternateIdentifier>https://ipt.sanbi.org.za/resource?r=flora_descriptions</alternateIdentifier>
+  <title xml:lang="eng">e-Flora of South Africa</title>
+      <creator>
+    <individualName>
+        <givenName>Marianne</givenName>
+      <surName>Le Roux</surName>
+    </individualName>
+    <organizationName>South African National Biodiversity Institute</organizationName>
+    <positionName>e-Flora Coordinator</positionName>
+    <address>
+        <deliveryPoint>P/Bag x 101</deliveryPoint>
+        <city>Silverton</city>
+        <administrativeArea>Gauteng</administrativeArea>
+        <postalCode>0184</postalCode>
+        <country>ZA</country>
+    </address>
+    <phone>0027128435124</phone>
+    <electronicMailAddress>m.leroux@sanbi.org.za</electronicMailAddress>
+          <userId directory="http://orcid.org/">000-0003-4705-2513</userId>
+      </creator>
+      <metadataProvider>
+    <individualName>
+        <givenName>Marianne</givenName>
+      <surName>Le Roux</surName>
+    </individualName>
+    <organizationName>South African National Biodiversity Institute</organizationName>
+    <positionName>e-Flora Coordinator</positionName>
+    <address>
+        <deliveryPoint>P/Bag x 101</deliveryPoint>
+        <city>Silverton</city>
+        <administrativeArea>Gauteng</administrativeArea>
+        <postalCode>0184</postalCode>
+        <country>ZA</country>
+    </address>
+    <phone>0027128435124</phone>
+    <electronicMailAddress>m.leroux@sanbi.org.za</electronicMailAddress>
+          <userId directory="http://orcid.org/">000-0003-4705-2513</userId>
+      </metadataProvider>
+      <metadataProvider>
+    <individualName>
+        <givenName>Fhatani</givenName>
+      <surName>Ranwashe</surName>
+    </individualName>
+    <organizationName>South African National Biodiversity Institute</organizationName>
+    <positionName>Data Information Specialist</positionName>
+    <electronicMailAddress>f.ranwashe@sanbi.org.za</electronicMailAddress>
+      </metadataProvider>
+      <associatedParty>
+    <individualName>
+        <givenName>Marianne</givenName>
+      <surName>le Roux</surName>
+    </individualName>
+    <organizationName>South African National Biodiversity Institute</organizationName>
+    <positionName>e-Flora Coordinator</positionName>
+    <address>
+        <deliveryPoint>2 Cussonia Avenue</deliveryPoint>
+        <city>Pretoria</city>
+        <administrativeArea>Gauteng</administrativeArea>
+        <postalCode>0184</postalCode>
+        <country>ZA</country>
+    </address>
+    <phone>0128435124</phone>
+    <electronicMailAddress>m.leroux@sanbi.org.za</electronicMailAddress>
+    <onlineUrl>http://www.sanbi.org.za</onlineUrl>
+          <userId directory="http://orcid.org/">0000-0003-4705-2513</userId>
+    <role>pointOfContact</role>
+      </associatedParty>
+  <pubDate>
+      2023-07-26
+  </pubDate>
+  <language>eng</language>
+  <abstract>
+    <para>The e-Flora of South Africa project was initiated in 2013 by the South African National Biodiversity Institute (SANBI) in support of the Global Strategy for Plant Conservation (GSPC, 2011-2020), Target 1 (to create a global Flora, consisting of ca. 350 000 species). South Africa&apos;s flora consists of ca. 21 000 species of which more than half are endemic. South Africa will contribute a national Flora towards Target 1 of the GSPC. South Africa&apos;s contribution is ca. 6% of the World Flora of which ca. 3% are endemics and therefore unique.
+
+South Africa’s electronic Flora is comprised of previously published descriptions. Permission to re-use extracts from published literature was obtained from the relevant copyright holders.</para>
+  </abstract>
+      <keywordSet>
+            <keyword>aggregator portal</keyword>
+            <keyword>big data</keyword>
+            <keyword>BODATSA</keyword>
+            <keyword>BRAHMS</keyword>
+            <keyword>data mining</keyword>
+            <keyword>e-Flora of South Africa</keyword>
+            <keyword>World Flora Online</keyword>
+        <keywordThesaurus>GBIF Dataset Type Vocabulary: http://rs.gbif.org/vocabulary/gbif/dataset_type.xml</keywordThesaurus>
+      </keywordSet>
+      <keywordSet>
+            <keyword>Aggregator portal</keyword>
+            <keyword>big data</keyword>
+            <keyword>BODATSA</keyword>
+            <keyword>BRAHMS</keyword>
+            <keyword>data mining</keyword>
+            <keyword>e-Flora of South Africa</keyword>
+            <keyword>inventory regional</keyword>
+            <keyword>World Flora Online</keyword>
+        <keywordThesaurus>GBIF Dataset Subtype Vocabulary: http://rs.gbif.org/vocabulary/gbif/dataset_subtype.xml</keywordThesaurus>
+      </keywordSet>
+      <keywordSet>
+            <keyword>Checklist</keyword>
+        <keywordThesaurus>GBIF Dataset Type Vocabulary: http://rs.gbif.org/vocabulary/gbif/dataset_type_2015-07-10.xml</keywordThesaurus>
+      </keywordSet>
+  <intellectualRights>
+    <para>This work is licensed under a <ulink url="http://creativecommons.org/licenses/by/4.0/legalcode"><citetitle>Creative Commons Attribution (CC-BY) 4.0 License</citetitle></ulink>.</para>
+  </intellectualRights>
+  <distribution scope="document">
+    <online>
+      <url function="information">https://www.sanbi.org/biodiversity-science/foundations-biodiversity/biosystematics-collections/e-flora</url>
+    </online>
+  </distribution>
+  <coverage>
+      <geographicCoverage>
+          <geographicDescription>Data is provided for South Africa.</geographicDescription>
+        <boundingCoordinates>
+          <westBoundingCoordinate>16.289</westBoundingCoordinate>
+          <eastBoundingCoordinate>33.369</eastBoundingCoordinate>
+          <northBoundingCoordinate>-22.011</northBoundingCoordinate>
+          <southBoundingCoordinate>-35.042</southBoundingCoordinate>
+        </boundingCoordinates>
+      </geographicCoverage>
+          <taxonomicCoverage>
+              <taxonomicClassification>
+                <taxonRankValue></taxonRankValue>
+              </taxonomicClassification>
+          </taxonomicCoverage>
+  </coverage>
+  <maintenance>
+    <description>
+      <para></para>
+    </description>
+    <maintenanceUpdateFrequency>irregular</maintenanceUpdateFrequency>
+  </maintenance>
+
+      <contact>
+    <individualName>
+        <givenName>Marianne</givenName>
+      <surName>Le Roux</surName>
+    </individualName>
+    <organizationName>South African National Biodiversity Institute</organizationName>
+    <positionName>e-Flora Coordinator</positionName>
+    <address>
+        <deliveryPoint>P/Bag x 101</deliveryPoint>
+        <city>Silverton</city>
+        <administrativeArea>Gauteng</administrativeArea>
+        <postalCode>0184</postalCode>
+        <country>ZA</country>
+    </address>
+    <phone>0027128435124</phone>
+    <electronicMailAddress>m.leroux@sanbi.org.za</electronicMailAddress>
+          <userId directory="http://orcid.org/">000-0003-4705-2513</userId>
+      </contact>
+  <methods>
+        <methodStep>
+          <description>
+            <para></para>
+          </description>
+        </methodStep>
+  </methods>
+  <project >
+    <title>e-Flora of South Africa</title>
+      <personnel>
+        <individualName>
+            <givenName>Marianne</givenName>
+          <surName>Le Roux</surName>
+        </individualName>
+              <userId directory="http://orcid.org/">0000-0003-4705-2513</userId>
+        <role>pointOfContact</role>
+      </personnel>
+      <abstract>
+        <para>Floristic accounts are useful products that provide taxonomic information for all plant species within a defined geographic region. Traditionally, these accounts were compiled by one to several contributors and published in hard copy volumes. These projects often took a long time to complete and soon became outdated with difficulty of publishing updated versions. However, with the availability of electronic tools and a developing digital environment, Flora compilation has embraced new and innovative ways to overcome some of these challenges. In South Africa, the first Floristic account was compiled by Thunberg in Flora Capensis in 1823. This was followed by Harvey and Sonder’s Flora Capensis between 1859 and 1933, which was completed through contributions from multiple authors. In 1955 the Flora of southern Africa (FSA) project commenced with the aim of replacing the outdated Flora Capensis. This project was never completed and as an alternative, a regional/provincial conspectus programme was initiated. To date, four volumes have been published (Flora of the northern provinces, 1996; the Greater Cape Floristic Region: core Cape Flora, 2012, the extra Cape Flora, 2013; and Plants of the Free State, 2017), with the Eastern Cape, KwaZulu-Natal and the Nama Karoo to follow. In response to the updated Strategy for Plant Conservation (2011–2020), South Africa committed to contribute a country-level Flora towards the World Flora Online (WFO) initiative (Target 1). After considering the remaining time in which to make such a contribution and the availability of published information (FSA volumes, published regional/provincial conspectuses and published taxonomic revisions), it was decided that an electronic Flora should be developed using existing information and following an aggregator portal approach. This approach involves the use of published information by acquiring permission from the copyright holders, digitising the material if it does not exist in electronic format, mining the required data from the publication, aggregating it into a database and publishing the data online in open access. Through this method, floristic information for all South African species will be made available in a single place by 2020.</para>
+      </abstract>
+      <funding>
+        <para>The project is funded through the South African National Biodiversity Institute.
+
+Additional funding to host an e-Flora workshop in collaboration with the Royal Botanical Garden, Kew was obtained through the National Research Foundation (grant reference number: UID92629) and the Royal Society (grant reference number: SA140038).</para>
+      </funding>
+      <studyAreaDescription>
+        <descriptor name="generic"
+                    citableClassificationSystem="false">
+          <descriptorValue>The e-Flora of South Africa contains information for all South African vascular plants.</descriptorValue>
+        </descriptor>
+      </studyAreaDescription>
+  </project>
+</dataset>
+  <additionalMetadata>
+    <metadata>
+      <gbif>
+          <dateStamp>2016-10-05T11:14:48.375+02:00</dateStamp>
+          <hierarchyLevel>dataset</hierarchyLevel>
+            <citation>e-Flora of South Africa. v1.42. 2023. South African National Biodiversity Institute. http://ipt.sanbi.org.za/iptsanbi/resource?r=flora_descriptions&amp;amp;v=1.42</citation>
+          <resourceLogoUrl>http://ipt.sanbi.org.za/iptsanbi/logo.do?r=flora_descriptions</resourceLogoUrl>
+            <jgtiCuratorialUnit>
+                <jgtiUnitType></jgtiUnitType>
+                <jgtiUnits
+                        uncertaintyMeasure="0">0</jgtiUnits>
+            </jgtiCuratorialUnit>
+          <dc:replaces>https://ipt.sanbi.org.za/resource?id=flora_descriptions/v1.42.xml</dc:replaces>
+      </gbif>
+    </metadata>
+  </additionalMetadata>
+</eml:eml>

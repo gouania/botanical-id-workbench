@@ -1,0 +1,37 @@
+<archive xmlns="http://rs.tdwg.org/dwc/text/" metadata="eml.xml">
+  <core encoding="UTF-8" fieldsTerminatedBy="\t" linesTerminatedBy="\n" fieldsEnclosedBy="" ignoreHeaderLines="1" rowType="http://rs.tdwg.org/dwc/terms/Taxon">
+    <files>
+      <location>taxon.txt</location>
+    </files>
+    <id index="0" />
+    <field index="1" term="http://rs.tdwg.org/dwc/terms/taxonID"/>
+    <field index="2" term="http://rs.tdwg.org/dwc/terms/scientificName"/>
+  </core>
+  <extension encoding="UTF-8" fieldsTerminatedBy="\t" linesTerminatedBy="\n" fieldsEnclosedBy="" ignoreHeaderLines="1" rowType="http://rs.gbif.org/terms/1.0/VernacularName">
+    <files>
+      <location>vernacularname.txt</location>
+    </files>
+    <coreid index="0" />
+    <field index="1" term="http://rs.tdwg.org/dwc/terms/vernacularName"/>
+    <field index="2" term="http://purl.org/dc/terms/source"/>
+    <field index="3" term="http://purl.org/dc/terms/language"/>
+  </extension>
+  <extension encoding="UTF-8" fieldsTerminatedBy="\t" linesTerminatedBy="\n" fieldsEnclosedBy="" ignoreHeaderLines="1" rowType="http://rs.gbif.org/terms/1.0/Reference">
+    <files>
+      <location>reference.txt</location>
+    </files>
+    <coreid index="0" />
+    <field index="1" term="http://purl.org/dc/terms/identifier"/>
+    <field index="2" term="http://purl.org/dc/terms/bibliographicCitation"/>
+  </extension>
+  <extension encoding="UTF-8" fieldsTerminatedBy="\t" linesTerminatedBy="\n" fieldsEnclosedBy="" ignoreHeaderLines="1" rowType="http://rs.gbif.org/terms/1.0/Description">
+    <files>
+      <location>description.txt</location>
+    </files>
+    <coreid index="0" />
+    <field index="1" term="http://purl.org/dc/terms/description"/>
+    <field index="2" term="http://purl.org/dc/terms/type"/>
+    <field index="3" term="http://purl.org/dc/terms/source"/>
+    <field index="4" term="http://purl.org/dc/terms/language"/>
+  </extension>
+</archive>
