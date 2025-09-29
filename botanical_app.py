@@ -25,7 +25,7 @@ from PIL import Image
 import io
 import urllib.parse
 
-# Configure page
+# Configure page with botanical theme
 st.set_page_config(
     page_title="Botanical ID Workbench",
     page_icon="🌿",
@@ -33,46 +33,123 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# Custom CSS for subdued botanical theme (greens and earth tones)
+# Custom CSS for botanical color scheme
 st.markdown("""
 <style>
-    .stApp {
-        background-color: #f5f5f5;
+    /* Main color scheme - Forest green and earth tones */
+    :root {
+        --forest-green: #2d5016;
+        --sage-green: #8b9d77;
+        --earth-brown: #6b5b4a;
+        --light-moss: #e8f0e3;
+        --cream: #f5f5dc;
     }
-    .main .block-container {
-        background-color: #fafafa;
-        padding-top: 1rem;
-        padding-bottom: 1rem;
-        padding-left: 1rem;
-        padding-right: 1rem;
+    
+    /* Sidebar styling */
+    [data-testid="stSidebar"] {
+        background: linear-gradient(180deg, #e8f0e3 0%, #f5f5dc 100%);
     }
-    .stMetric > label {
-        color: #2e7d32;
-    }
-    .stMetric > div > div > div {
-        color: #388e3c;
-    }
-    .stButton > button {
-        background-color: #4caf50;
-        color: white;
-    }
-    .stButton > button:hover {
-        background-color: #45a049;
-    }
-    .stTextInput > div > div > input {
-        background-color: #e8f5e8;
-    }
-    .stSelectbox > div > div > select {
-        background-color: #e8f5e8;
-    }
-    .stSlider > div > div > div > div {
-        background-color: #81c784;
-    }
+    
+    /* Headers */
     h1, h2, h3 {
-        color: #1b5e20;
+        color: #2d5016 !important;
     }
-    .stMarkdown {
-        color: #2e7d32;
+    
+    /* Metrics */
+    [data-testid="stMetricValue"] {
+        color: #2d5016 !important;
+        font-weight: 600;
+    }
+    
+    [data-testid="stMetricLabel"] {
+        color: #6b5b4a !important;
+    }
+    
+    /* Buttons */
+    .stButton>button {
+        background-color: #2d5016;
+        color: white;
+        border-radius: 8px;
+        border: none;
+        padding: 0.5rem 1rem;
+        font-weight: 500;
+        transition: all 0.3s;
+    }
+    
+    .stButton>button:hover {
+        background-color: #3d6b22;
+        box-shadow: 0 4px 8px rgba(45, 80, 22, 0.3);
+    }
+    
+    .stButton>button[kind="primary"] {
+        background-color: #4a7c24;
+    }
+    
+    .stButton>button[kind="primary"]:hover {
+        background-color: #5a9030;
+    }
+    
+    /* Tabs */
+    .stTabs [data-baseweb="tab-list"] {
+        gap: 8px;
+        background-color: #f5f5dc;
+        padding: 8px;
+        border-radius: 8px;
+    }
+    
+    .stTabs [data-baseweb="tab"] {
+        background-color: transparent;
+        color: #6b5b4a;
+        border-radius: 6px;
+        padding: 8px 16px;
+    }
+    
+    .stTabs [aria-selected="true"] {
+        background-color: #2d5016 !important;
+        color: white !important;
+    }
+    
+    /* Expander */
+    .streamlit-expanderHeader {
+        background-color: #e8f0e3;
+        border-radius: 6px;
+        color: #2d5016;
+        font-weight: 500;
+    }
+    
+    /* Info boxes */
+    .stAlert {
+        border-radius: 8px;
+    }
+    
+    div[data-baseweb="notification"] {
+        border-left: 4px solid #2d5016;
+    }
+    
+    /* Dataframe */
+    .dataframe {
+        border: 1px solid #8b9d77 !important;
+    }
+    
+    /* Input fields */
+    .stTextInput>div>div>input,
+    .stNumberInput>div>div>input,
+    .stTextArea>div>div>textarea {
+        border-color: #8b9d77;
+        border-radius: 6px;
+    }
+    
+    .stTextInput>div>div>input:focus,
+    .stNumberInput>div>div>input:focus,
+    .stTextArea>div>div>textarea:focus {
+        border-color: #2d5016;
+        box-shadow: 0 0 0 1px #2d5016;
+    }
+    
+    /* Multiselect */
+    .stMultiSelect>div>div {
+        border-color: #8b9d77;
+        border-radius: 6px;
     }
 </style>
 """, unsafe_allow_html=True)
@@ -206,7 +283,7 @@ INAT_LICENSE_MAP = {
 
 @st.cache_data
 def get_species_images(species_name, limit=5):
-    """Fetch top iNaturalist photos for a species (default + top-voted observations). Returns photos and taxon_id."""
+    """Fetch top iNaturalist photos for a species (default + top-voted observations)."""
     try:
         # Search for taxon ID using autocomplete endpoint
         encoded_name = urllib.parse.quote(species_name)
@@ -214,11 +291,11 @@ def get_species_images(species_name, limit=5):
         response = requests.get(search_url, timeout=10)
         data = response.json()
         if not data.get('results'):
-            return [], None
+            return []
         taxon = data['results'][0]
         # Filter to ensure it's a species if possible
         if taxon.get('rank') != 'species':
-            return [], None
+            return []
         taxon_id = taxon['id']
 
         photos = []
@@ -258,10 +335,10 @@ def get_species_images(species_name, limit=5):
             if len(photos) >= limit:
                 break
 
-        return photos, taxon_id
+        return photos
     except Exception as e:
         logger.error(f"Error fetching iNat images for {species_name}: {e}")
-        return [], None
+        return []
 
 def extract_month_from_date(date_str):
     """Extract month from GBIF eventDate."""
@@ -463,24 +540,38 @@ def get_local_eflora_description(scientific_name, eflora_data):
         return False, f"Error retrieving data for {clean_name}"
 
 def create_phenology_chart(phenology_data, species_name):
-    """Create a chart using Plotly."""
+    """Create a chart using Plotly with botanical color scheme."""
     months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
               'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
     counts = [phenology_data.get(i, 0) for i in range(1, 13)]
     
-    fig = go.Figure(data=go.Bar(x=months, y=counts))
+    fig = go.Figure(data=go.Bar(
+        x=months, 
+        y=counts,
+        marker=dict(
+            color='#4a7c24',
+            line=dict(color='#2d5016', width=1)
+        )
+    ))
     fig.update_layout(
         title=f"Observations by Month: {species_name}",
         xaxis_title="Month",
         yaxis_title="Observation Count",
-        height=400
+        height=400,
+        plot_bgcolor='#f5f5dc',
+        paper_bgcolor='white',
+        font=dict(color='#2d5016')
     )
     return fig
 
 def create_species_map(records, species_list, center_lat, center_lon):
-    """Create an interactive map with species observations."""
-    # Create base map
-    m = folium.Map(location=[center_lat, center_lon], zoom_start=10)
+    """Create an interactive map with species observations - no black rectangle."""
+    # Create base map with clean styling
+    m = folium.Map(
+        location=[center_lat, center_lon], 
+        zoom_start=10,
+        tiles='OpenStreetMap'
+    )
     
     # Add center point
     folium.Marker(
@@ -489,8 +580,9 @@ def create_species_map(records, species_list, center_lat, center_lon):
         icon=folium.Icon(color='red', icon='info-sign')
     ).add_to(m)
     
-    # Color mapping for top species
-    colors = ['blue', 'green', 'purple', 'orange', 'darkred', 'lightred', 'beige', 'darkblue', 'darkgreen', 'gray']
+    # Botanical color palette for species
+    colors = ['#2d5016', '#4a7c24', '#6b5b4a', '#8b9d77', '#d4a574', 
+              '#9b6b43', '#7d9b5e', '#5a7c3d', '#4d6b2f', '#a08968']
     
     # Add species points (sample for performance)
     for i, species in enumerate(species_list[:10]):
@@ -508,22 +600,52 @@ def create_species_map(records, species_list, center_lat, center_lon):
                     color=color,
                     fill=True,
                     fillColor=color,
-                    weight=2
+                    weight=2,
+                    opacity=0.8,
+                    fillOpacity=0.6
                 ).add_to(m)
     
-    # Add legend with better visibility
+    # Create a feature group for the legend to properly control its display
     legend_html = '''
     <div style="position: fixed; 
-                bottom: 50px; left: 50px; width: 250px; height: auto; 
-                background-color: rgba(255, 255, 255, 0.98); border:2px solid #333; z-index:9999; 
-                font-size:11px; padding: 10px; box-shadow: 0 4px 12px rgba(0,0,0,0.4); color: #333; font-weight: bold;">
-    <b>Species Legend</b><br>
+                bottom: 50px; 
+                left: 50px; 
+                width: 280px; 
+                background-color: rgba(255, 255, 255, 0.95); 
+                border: 2px solid #2d5016; 
+                border-radius: 8px;
+                z-index: 9999; 
+                font-size: 12px; 
+                padding: 12px;
+                box-shadow: 0 4px 12px rgba(45, 80, 22, 0.3);
+                font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;">
+    <div style="color: #2d5016; font-weight: bold; font-size: 14px; margin-bottom: 8px; border-bottom: 2px solid #8b9d77; padding-bottom: 6px;">
+        🌿 Species Legend
+    </div>
     '''
+    
     for i, species in enumerate(species_list[:10]):
         color = colors[i % len(colors)]
-        legend_html += f'<i style="background:{color}; width:16px; height:16px; display: inline-block; margin-right: 6px; border:1px solid #333;"></i> {species["name"]}<br>'
+        # Truncate long species names
+        display_name = species['name'] if len(species['name']) <= 25 else species['name'][:22] + '...'
+        legend_html += f'''
+        <div style="margin: 4px 0; display: flex; align-items: center;">
+            <div style="background: {color}; 
+                        width: 18px; 
+                        height: 18px; 
+                        border-radius: 50%; 
+                        display: inline-block; 
+                        margin-right: 8px; 
+                        border: 2px solid #2d5016;
+                        flex-shrink: 0;">
+            </div>
+            <span style="color: #2d5016; font-size: 11px; line-height: 1.3;">{display_name}</span>
+        </div>
+        '''
+    
     legend_html += '</div>'
     
+    # Add the legend as an HTML element
     m.get_root().html.add_child(folium.Element(legend_html))
     
     return m
@@ -614,22 +736,6 @@ def main():
                     import shutil
                     shutil.rmtree(cache_dir)
             st.success("Cache cleared!")
-        
-        # About section in sidebar
-        st.markdown("---")
-        st.subheader("ℹ️ About")
-        st.markdown("""
-        **Created by:** Daniel Cahen
-        
-        **Data Sources:**
-        - GBIF (Global Biodiversity Information Facility)
-        - e-Flora of South Africa (SANBI)
-        - iNaturalist
-        
-        **App License:** MIT License - Free to use, modify, and distribute.
-        
-        For issues or contributions: [GitHub Repo](https://github.com/your-repo/botanical-id-workbench) (placeholder)
-        """)
     
     # Main content area
     if st.session_state.species_data is None:
@@ -647,8 +753,11 @@ def main():
             location=[latitude, longitude],
             radius=radius_km * 1000,  # Convert to meters
             popup=f"Search radius: {radius_km} km",
-            color="blue",
-            fill=False
+            color="#4a7c24",
+            fill=True,
+            fillColor="#8b9d77",
+            fillOpacity=0.2,
+            weight=2
         ).add_to(preview_map)
         st_folium(preview_map, height=400, width=700)
         
@@ -674,7 +783,7 @@ def main():
             df = pd.DataFrame(st.session_state.species_data)
             df_display = df[['name', 'family', 'count', 'status_flag']].copy()
             df_display.columns = ['Species', 'Family', 'Records', 'Status']
-            st.dataframe(df_display)
+            st.dataframe(df_display, use_container_width=True)
             
             # Define callback functions
             def select_all():
@@ -755,7 +864,7 @@ def main():
                                     with col2:
                                         # Multiple iNaturalist images if enabled
                                         with st.spinner("Fetching images..."):
-                                            images_data, taxon_id = get_species_images(species['name'])
+                                            images_data = get_species_images(species['name'])
                                             if images_data:
                                                 for img_data in images_data:
                                                     try:
@@ -765,8 +874,6 @@ def main():
                                                     except:
                                                         st.warning("Failed to load one or more images")
                                                 st.caption(f"Showing top {len(images_data)} iNaturalist photos (default + top-voted)")
-                                                if taxon_id:
-                                                    st.markdown(f"[View all photos of {species['name']} on iNaturalist](https://www.inaturalist.org/taxa/{taxon_id})")
                                             else:
                                                 st.info("No iNaturalist photos available")
                                 with col3 if include_images else col2:
@@ -785,7 +892,7 @@ def main():
                     longitude
                 )
                 st_folium(species_map, height=600, width=700)
-                st.info("🎯 Red info icon = search center. Colored dots = species observations (top 10 species shown). Check the legend for species-color mapping.")
+                st.info("🎯 Red marker = search center | Colored dots = species observations (top 10 species shown, up to 50 records each)")
             else:
                 st.warning("Map data not available. Run search first.")
         
@@ -817,8 +924,14 @@ def main():
                     families_df = pd.DataFrame(top_families, columns=['Family', 'Species Count'])
                     
                     fig = px.bar(families_df, x='Species Count', y='Family', orientation='h',
-                               title="Top 10 Families by Species Count")
-                    fig.update_layout(height=400)
+                               title="Top 10 Families by Species Count",
+                               color_discrete_sequence=['#4a7c24'])
+                    fig.update_layout(
+                        height=400,
+                        plot_bgcolor='#f5f5dc',
+                        paper_bgcolor='white',
+                        font=dict(color='#2d5016')
+                    )
                     st.plotly_chart(fig, use_container_width=True)
         
         with tab4:
@@ -920,19 +1033,6 @@ def main():
             
             else:
                 st.warning("No species selected for export. Please select species in the Species List tab.")
-    
-    # Footer
-    st.markdown("---")
-    st.markdown(
-        "<p style='text-align: center; color: #666;'>"
-        "Botanical ID Workbench &copy; 2025 Daniel Cahen | "
-        "<a href='https://opensource.org/licenses/MIT' target='_blank'>MIT License</a> | "
-        "Powered by <a href='https://www.gbif.org/' target='_blank'>GBIF</a>, "
-        "<a href='http://ipt.sanbi.org.za/' target='_blank'>e-Flora SA</a>, and "
-        "<a href='https://www.inaturalist.org/' target='_blank'>iNaturalist</a>"
-        "</p>",
-        unsafe_allow_html=True
-    )
 
 if __name__ == "__main__":
     main()
