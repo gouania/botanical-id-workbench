@@ -91,10 +91,10 @@ st.markdown("""
         color: #6b5b4a !important;
     }
     
-    /* Buttons */
+    /* Buttons - General */
     .stButton>button {
         background-color: #2d5016;
-        color: white;
+        color: white !important;
         border-radius: 8px;
         border: none;
         padding: 0.5rem 1rem;
@@ -109,10 +109,22 @@ st.markdown("""
     
     .stButton>button[kind="primary"] {
         background-color: #4a7c24;
+        color: white !important;
     }
     
     .stButton>button[kind="primary"]:hover {
         background-color: #5a9030;
+    }
+    
+    /* Sidebar-specific button fixes for visibility */
+    [data-testid="stSidebar"] .stButton > button {
+        color: white !important;
+        background-color: #2d5016 !important;
+    }
+    
+    [data-testid="stSidebar"] .stButton > button[kind="primary"] {
+        color: white !important;
+        background-color: #4a7c24 !important;
     }
     
     /* Tabs */
@@ -358,13 +370,13 @@ def get_species_images(species_name, limit=5):
             photo_url = default_photo.get('medium_url') or default_photo.get('square_url')
             if photo_url:
                 # IMPROVEMENT 4: Use photo-specific user and license for default photo attribution
-                user = default_photo.get('user', {})
-                license_code = default_photo.get('license_code')
+                photographer = default_photo.get('native_realname') or default_photo.get('native_username') or 'Unknown'
+                license_code = default_photo.get('license_code') or default_photo.get('license')
                 license_name = INAT_LICENSE_MAP.get(license_code, 'Unknown')
                 if license_name != 'Unknown':
-                    caption = f"Photo by {user.get('login', 'Unknown')} | License: {license_name}"
+                    caption = f"Photo by {photographer} | License: {license_name}"
                 else:
-                    caption = f"Photo by {user.get('login', 'Unknown')}"
+                    caption = f"Photo by {photographer}"
                 photos.append({
                     'url': photo_url,
                     'caption': caption
@@ -378,15 +390,15 @@ def get_species_images(species_name, limit=5):
             for photo in obs.get('photos', [])[:1]:  # One photo per observation
                 photo_url = photo.get('medium_url') or photo.get('square_url')
                 if photo_url and photo_url not in [p['url'] for p in photos]:  # Avoid duplicates
-                    user = photo.get('user', {})
-                    license_code = photo.get('license_code')
+                    photographer = photo.get('native_realname') or photo.get('native_username') or 'Unknown'
+                    license_code = photo.get('license_code') or photo.get('license')
                     license_name = INAT_LICENSE_MAP.get(license_code, 'Unknown')
                     
                     # IMPROVEMENT 4: Ensure photographer and license are in caption
                     if license_name != 'Unknown':
-                        caption = f"Photo by {user.get('login', 'Unknown')} | License: {license_name}"
+                        caption = f"Photo by {photographer} | License: {license_name}"
                     else:
-                        caption = f"Photo by {user.get('login', 'Unknown')}"
+                        caption = f"Photo by {photographer}"
                         
                     photos.append({
                         'url': photo_url,
@@ -622,11 +634,12 @@ def create_phenology_chart(phenology_data, species_name):
         height=400,
         plot_bgcolor='#f5f5dc',
         paper_bgcolor='white',
-        font=dict(color='#2d5016')
+        font=dict(color='black')
     )
-    # IMPROVEMENT 2: Ensure axis tick labels are dark for readability
-    fig.update_xaxes(tickfont=dict(color='#2d5016'))
-    fig.update_yaxes(tickfont=dict(color='#2d5016'))
+    # IMPROVEMENT 2: Ensure axis tick labels and title are black for readability
+    fig.update_xaxes(tickfont=dict(color='black'))
+    fig.update_yaxes(tickfont=dict(color='black'))
+    fig.update_layout(title_font_color='black')
     return fig
 
 def create_species_map(records, species_list, center_lat, center_lon):
@@ -1013,7 +1026,7 @@ def main():
                         height=400,
                         plot_bgcolor='#f5f5dc',
                         paper_bgcolor='white',
-                        font=dict(color='#2d5016')
+                        font=dict(color='black')
                     )
                     st.plotly_chart(fig, use_container_width=True)
         
