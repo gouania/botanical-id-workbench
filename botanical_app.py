@@ -148,6 +148,18 @@ def format_species_name(name):
 def safe_gbif_backbone(name, kingdom='Plantae'):
     return gbif_species.name_backbone(name=name, kingdom=kingdom, verbose=False)
 
+# iNaturalist license code mapping
+INAT_LICENSE_MAP = {
+    1: 'CC BY',
+    2: 'CC BY-SA',
+    3: 'CC BY-ND',
+    4: 'CC BY-NC',
+    5: 'CC BY-NC-ND',
+    6: 'CC BY-NC-SA',
+    7: 'CC BY-SA (iNaturalist)',
+    None: 'Unknown'
+}
+
 @st.cache_data
 def get_species_images(species_name, limit=5):
     """Fetch top iNaturalist photos for a species (default + top-voted observations)."""
@@ -186,10 +198,16 @@ def get_species_images(species_name, limit=5):
                 photo_url = photo.get('medium_url') or photo.get('square_url')
                 if photo_url and photo_url not in [p['url'] for p in photos]:  # Avoid duplicates
                     user = photo.get('user', {})
-                    license_code = photo.get('license_code', 'Unknown')
+                    license_code = photo.get('license_code')
+                    license_name = INAT_LICENSE_MAP.get(license_code, 'Unknown')
+                    # Only include attribution if license requires it (all CC licenses do, but skip if unknown)
+                    if license_name != 'Unknown':
+                        caption = f"Photo by {user.get('login', 'Unknown')} | License: {license_name}"
+                    else:
+                        caption = f"Photo by {user.get('login', 'Unknown')}"
                     photos.append({
                         'url': photo_url,
-                        'caption': f"Photo by {user.get('login', 'Unknown')} | License: {license_code}"
+                        'caption': caption
                     })
                 if len(photos) >= limit:
                     break
