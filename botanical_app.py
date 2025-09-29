@@ -29,7 +29,7 @@ INAT_HEADERS = {
 
 # Configure page with botanical theme
 st.set_page_config(
-    page_title="Botanical Identification Workbench (South Africa edition)",
+    page_title="Botanical ID Workbench: South Africa",
     page_icon="🌿",
     layout="wide",
     initial_sidebar_state="expanded"
@@ -566,7 +566,7 @@ def create_copy_button(copy_text, label):
 
 # Main Streamlit App
 def main():
-    st.title("🌿 Botanical Identification Workbench (South Africa edition)")
+    st.title("🌿 Botanical ID Workbench: South Africa")
     st.markdown("*Advanced species identification using GBIF data and local flora databases*")
     
     # Sidebar for parameters
