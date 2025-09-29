@@ -55,7 +55,12 @@ st.markdown("""
     [data-testid="stSidebar"] label, 
     [data-testid="stSidebar"] .st-emotion-cache-16idsys, /* Common Streamlit text element for labels */
     [data-testid="stSidebar"] .st-emotion-cache-10trblm, /* Another common Streamlit text element */
-    [data-testid="stSidebar"] .st-emotion-cache-1f1g6o9 { /* Targets the generic text/labels like "Taxon Name" */
+    [data-testid="stSidebar"] .st-emotion-cache-1f1g6o9, /* Targets generic text/labels like "Taxon Name" */
+    [data-testid="stSidebar"] .st-emotion-cache-1v0mbdj, /* Targets checkbox label text */
+    [data-testid="stSidebar"] .st-emotion-cache-1v0mbdj p, /* Targets text inside checkbox label */
+    [data-testid="stSidebar"] .st-emotion-cache-1g0q2nr, /* Targets slider min/max value labels (1, 200) */
+    [data-testid="stSidebar"] .st-emotion-cache-1g0q2nr p,
+    [data-testid="stSidebar"] .streamlit-expanderHeader { /* Targets expander header text */
         color: var(--forest-green) !important; /* Forces dark color against light background */
     }
     
@@ -119,10 +124,10 @@ st.markdown("""
     }
     
     /* Expander */
+    /* Note: The header text color is already fixed in IMPROVEMENT 1, this keeps the background/border styling */
     .streamlit-expanderHeader {
         background-color: #e8f0e3;
         border-radius: 6px;
-        color: #2d5016;
         font-weight: 500;
     }
     
@@ -342,6 +347,7 @@ def get_species_images(species_name, limit=5):
             if photo_url:
                 # Use the taxon's attribution field for the default photo
                 attribution_text = taxon.get('attribution', 'Unknown')
+                # IMPROVEMENT 2: Ensure photographer and license are in caption
                 caption = f"Default photo | Attribution: {attribution_text}"
                 photos.append({
                     'url': photo_url,
@@ -360,7 +366,7 @@ def get_species_images(species_name, limit=5):
                     license_code = photo.get('license_code')
                     license_name = INAT_LICENSE_MAP.get(license_code, 'Unknown')
                     
-                    # Ensure photographer and license are in caption
+                    # IMPROVEMENT 2: Ensure photographer and license are in caption
                     if license_name != 'Unknown':
                         caption = f"Photo by {user.get('login', 'Unknown')} | License: {license_name}"
                     else:
@@ -957,7 +963,7 @@ def main():
         with tab3:
             st.subheader("📈 Search Statistics")
             
-            if st.session_session.species_data:
+            if st.session_state.species_data:
                 # Summary statistics
                 col1, col2, col3, col4 = st.columns(4)
                 
