@@ -743,28 +743,29 @@ def get_species_list_from_gbif(latitude, longitude, radius_km, taxon_name, recor
 
 def get_local_eflora_description(scientific_name, eflora_data):
     """
-    Get description from local e-Flora data, with synonym lookup via GBIF.
+    Get description from local e-Flora data, with robust fuzzy matching and synonym lookup.
     """
     if eflora_data is None:
         return False, "e-Flora data not available"
 
-    # --- Helper function to extract data for a given name ---
-    def extract_from_eflora(name_to_check, original_search_name=None):
-        matched_name = None
-        # Try exact match first
-        if name_to_check in eflora_data.index:
-            matched_name = name_to_check
-        else:
-            # Try fuzzy matching
-            matches = process.extractOne(name_to_check, eflora_data.index, scorer=fuzz.token_sort_ratio)
-            if matches and matches[1] >= 90:  # 90% similarity threshold
-                matched_name = matches[0]
+    # --- Helper function to find the best match in the eflora dataframe ---
+    def find_best_match(name_to_check, df):
+        # Use a more robust fuzzy matching scorer that handles extra words (like author names)
+        # We search against the full, original scientific name for better accuracy
+        choices = df['scientificName'].dropna().tolist()
+        match = process.extractOne(name_to_check, choices, scorer=fuzz.WRatio, score_cutoff=88)
+        
+        if match:
+            # If we get a good match, find the corresponding clean name (index) to retrieve the full record
+            matched_full_name = match[0]
+            matched_record = df[df['scientificName'] == matched_full_name].iloc[0]
+            return matched_record.name # Return the index (clean name) of the matched record
+        return None
 
-        if not matched_name:
-            return None
-
+    # --- Helper function to extract and format data ---
+    def extract_and_format(matched_clean_name, original_search_name=None):
         try:
-            row = eflora_data.loc[matched_name]
+            row = eflora_data.loc[matched_clean_name]
             descriptions = row['descriptions']
             vernacular_raw = row['vernacularName']
             full_scientific_name = row['scientificName']
@@ -777,7 +778,7 @@ def get_local_eflora_description(scientific_name, eflora_data):
             if not isinstance(descriptions, dict) or not descriptions:
                 return None
 
-            # Build description text
+            # Build description text, indicating if a synonym was used
             if original_search_name and original_search_name != full_scientific_name:
                 name_display = f"**Scientific Name:** {full_scientific_name} (Searched as: *{original_search_name}*)"
             else:
@@ -816,32 +817,33 @@ def get_local_eflora_description(scientific_name, eflora_data):
             return None
 
     # --- Main Logic ---
-    # 1. Try direct lookup with the original name
-    clean_name = format_species_name(scientific_name)
-    result = extract_from_eflora(clean_name)
-    
-    if result:
-        return True, result
+    # 1. Try to find a match for the original name
+    matched_index = find_best_match(scientific_name, eflora_data)
+    if matched_index:
+        result = extract_and_format(matched_index)
+        if result:
+            return True, result
 
-    # 2. If direct lookup fails, check GBIF for synonyms
+    # 2. If it fails, try to find a match for the synonym (accepted name)
     try:
         backbone_info = safe_gbif_backbone(scientific_name)
         is_synonym = backbone_info.get('synonym', False)
         accepted_name_str = backbone_info.get('acceptedScientificName')
 
         if is_synonym and accepted_name_str:
-            st.info(f"'{scientific_name}' is a synonym. Trying accepted name: '{accepted_name_str}'...")
-            clean_accepted_name = format_species_name(accepted_name_str)
+            # st.info(f"'{scientific_name}' is a synonym. Trying accepted name: '{accepted_name_str}'...")
+            matched_index_from_synonym = find_best_match(accepted_name_str, eflora_data)
             
-            # 3. Try lookup with the accepted name
-            result = extract_from_eflora(clean_accepted_name, original_search_name=scientific_name)
-            if result:
-                return True, result
+            if matched_index_from_synonym:
+                result = extract_and_format(matched_index_from_synonym, original_search_name=scientific_name)
+                if result:
+                    return True, result
     except Exception as e:
         logger.error(f"GBIF backbone lookup failed for {scientific_name}: {e}")
 
     # 4. If all lookups fail
     return False, f"No description available for {scientific_name} or its accepted synonym."
+
 
 def create_species_map(records, species_list, center_lat, center_lon):
     """Create an interactive map with species observations."""
