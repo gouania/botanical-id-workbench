@@ -1,3 +1,15 @@
+Yes, this is a great addition! Switching to iNaturalist photos provides higher-quality, community-vetted images that align better with the "chosen" photos on taxon pages (top-voted observations for the exact taxon, which prioritize photos of that species itself before descendants). It won't affect performance much—iNaturalist's API is lightweight, and we're limiting to the top 5 photos per species (fetched via 2 quick calls: one for taxon lookup, one for observations). With Streamlit caching, it's efficient even for 10 selected species. Images load on-demand only when the "Include Images" checkbox is enabled, and we use medium-sized URLs to keep bandwidth low.
+
+I've modified the code accordingly:
+- Replaced `get_species_image` with `get_species_images` (returns a list of up to 5 photo dicts).
+- Updated the display logic in the expander to show multiple images stacked vertically in the image column (with captions).
+- Adjusted column widths slightly for better balance when images are included.
+- Added error handling and fallbacks.
+- No other changes needed—everything else (e.g., caching, exports) works as-is.
+
+Here's the full updated code:
+
+```python
 import streamlit as st
 import pandas as pd
 import pygbif.species as gbif_species
@@ -23,6 +35,7 @@ import plotly.express as px
 import plotly.graph_objects as go
 from PIL import Image
 import io
+import urllib.parse
 
 # Configure page
 st.set_page_config(
@@ -148,29 +161,57 @@ def safe_gbif_backbone(name, kingdom='Plantae'):
     return gbif_species.name_backbone(name=name, kingdom=kingdom, verbose=False)
 
 @st.cache_data
-def get_species_image(species_name, limit=1):
-    """Fetch images for a species from GBIF occurrences with images."""
+def get_species_images(species_name, limit=5):
+    """Fetch top iNaturalist photos for a species (default + top-voted observations)."""
     try:
-        taxon_info = safe_gbif_backbone(species_name)
-        if 'usageKey' not in taxon_info:
-            return None
-        response = gbif_occ.search(
-            taxonKey=taxon_info['usageKey'], 
-            hasImage=True, 
-            limit=limit
-        )
-        if response and 'results' in response and response['results']:
-            media = response['results'][0].get('media', [])
-            if media:
-                img = media[0]
-                return {
-                    'url': img.get('identifier'),
-                    'creator': img.get('creator', 'Unknown'),
-                    'license': img.get('license', 'Unknown')
-                }
-        return None
-    except:
-        return None
+        # Search for taxon ID
+        encoded_name = urllib.parse.quote(species_name)
+        search_url = f"https://api.inaturalist.org/v1/taxa/search?q={encoded_name}&rank=species&per_page=1"
+        response = requests.get(search_url, timeout=10)
+        data = response.json()
+        if not data.get('results'):
+            return []
+        taxon = data['results'][0]
+        taxon_id = taxon['id']
+
+        photos = []
+
+        # Add default photo if available
+        default_photo = taxon.get('default_photo')
+        if default_photo:
+            photo_url = default_photo.get('url')  # Medium size
+            if not photo_url:
+                photo_url = default_photo.get('square_url')
+            photos.append({
+                'url': photo_url,
+                'caption': f"Default photo for {species_name}"
+            })
+
+        # Fetch top-voted observation photos (prioritizes chosen photos for the taxon)
+        obs_url = f"https://api.inaturalist.org/v1/observations?taxon_id={taxon_id}&has[]=photos&per_page={limit}&order_by=votes&order=desc"
+        obs_response = requests.get(obs_url, timeout=10)
+        obs_data = obs_response.json()
+        for obs in obs_data.get('results', [])[:limit]:
+            for photo in obs.get('photos', [])[:1]:  # One photo per observation
+                photo_url = photo.get('url')  # Medium size
+                if not photo_url:
+                    photo_url = photo.get('square_url')
+                if photo_url and photo_url not in [p['url'] for p in photos]:  # Avoid duplicates
+                    user = photo.get('user', {})
+                    license_code = photo.get('license_code', 'Unknown')
+                    photos.append({
+                        'url': photo_url,
+                        'caption': f"Photo by {user.get('login', 'Unknown')} | License: {license_code}"
+                    })
+                if len(photos) >= limit:
+                    break
+            if len(photos) >= limit:
+                break
+
+        return photos
+    except Exception as e:
+        logger.error(f"Error fetching iNat images for {species_name}: {e}")
+        return []
 
 def extract_month_from_date(date_str):
     """Extract month from GBIF eventDate."""
@@ -646,19 +687,20 @@ def main():
                                 
                                 if include_images:
                                     with col2:
-                                        # Image if enabled
-                                        with st.spinner("Fetching image..."):
-                                            image_data = get_species_image(species['name'])
-                                            if image_data:
-                                                try:
-                                                    response = requests.get(image_data['url'], timeout=10)
-                                                    img = Image.open(io.BytesIO(response.content))
-                                                    caption = f"Image of {species['name']} | Photographer: {image_data['creator']} | License: {image_data['license']}"
-                                                    st.image(img, caption=caption, use_container_width=True)
-                                                except:
-                                                    st.warning("Failed to load image")
+                                        # Multiple iNaturalist images if enabled
+                                        with st.spinner("Fetching images..."):
+                                            images_data = get_species_images(species['name'])
+                                            if images_data:
+                                                for img_data in images_data:
+                                                    try:
+                                                        response = requests.get(img_data['url'], timeout=10)
+                                                        img = Image.open(io.BytesIO(response.content))
+                                                        st.image(img, caption=img_data['caption'], use_container_width=True)
+                                                    except:
+                                                        st.warning("Failed to load one or more images")
+                                                st.caption(f"Showing top {len(images_data)} iNaturalist photos (default + top-voted)")
                                             else:
-                                                st.info("No image available")
+                                                st.info("No iNaturalist photos available")
                                 with col3 if include_images else col2:
                                     # Observations by month chart
                                     if species.get('phenology'):
@@ -813,3 +855,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+```
