@@ -536,6 +536,14 @@ def main():
         # Display search results
         st.success(f"Found {len(st.session_state.species_data)} species!")
         
+        # Prepare species options for multiselect
+        species_list_limited = st.session_state.species_data[:50]
+        species_options = [
+            f"{sp['name']} - *{sp['family']}* ({sp['count']} record{'s' if sp['count'] != 1 else ''}){sp['status_flag']}"
+            for sp in species_list_limited
+        ]
+        st.session_state.species_options = species_options
+        
         # Create tabs for different views
         tab1, tab2, tab3, tab4 = st.tabs(["📊 Species List", "🗺️ Map View", "📈 Analysis", "📄 Export"])
         
@@ -548,17 +556,32 @@ def main():
             df_display.columns = ['Species', 'Family', 'Records', 'Status']
             st.dataframe(df_display)
             
-            # Prepare options for multiselect (limit to 50 for performance)
-            species_list_limited = st.session_state.species_data[:50]
-            species_options = [
-                f"{sp['name']} - *{sp['family']}* ({sp['count']} record{'s' if sp['count'] != 1 else ''}){sp['status_flag']}"
-                for sp in species_list_limited
-            ]
+            # Define callback functions
+            def select_all():
+                st.session_state.species_selector = st.session_state.species_options[:]
+                st.rerun()
+            
+            def deselect_all():
+                st.session_state.species_selector = []
+                st.rerun()
+            
+            def top_ten():
+                st.session_state.species_selector = st.session_state.species_options[:10]
+                st.rerun()
+            
+            # Selection control buttons
+            col1, col2, col3 = st.columns(3)
+            with col1:
+                st.button("Select All", on_click=select_all)
+            with col2:
+                st.button("Deselect All", on_click=deselect_all)
+            with col3:
+                st.button("Top 10 Only", on_click=top_ten)
             
             # Multiselect for species selection
             selected_labels = st.multiselect(
                 "Select species for analysis:",
-                species_options,
+                st.session_state.species_options,
                 key="species_selector",
                 format_func=lambda x: x
             )
@@ -572,21 +595,6 @@ def main():
             
             # Update session state for compatibility
             st.session_state.selected_species = {name: True for name in selected_names}
-            
-            # Selection control buttons
-            col1, col2, col3 = st.columns(3)
-            with col1:
-                if st.button("Select All"):
-                    st.session_state.species_selector = species_options
-                    st.rerun()
-            with col2:
-                if st.button("Deselect All"):
-                    st.session_state.species_selector = []
-                    st.rerun()
-            with col3:
-                if st.button("Top 10 Only"):
-                    st.session_state.species_selector = species_options[:10]
-                    st.rerun()
             
             # Process selected species
             selected_count = len(selected_names)
