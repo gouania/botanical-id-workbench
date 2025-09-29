@@ -5,6 +5,8 @@ import pygbif.occurrences as gbif_occ
 import math
 import time
 import os
+import requests 
+import zipfile   
 import json
 import requests
 from datetime import datetime
@@ -42,6 +44,11 @@ st.html("styles.css")
 warnings.filterwarnings('ignore')
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
+# --- Constants for Data Loading ---
+EFLORA_ZIP_URL = "https://ipt.sanbi.org.za/archive.do?r=flora_descriptions&v=1.42"
+DATA_DIR = "data"
+REQUIRED_FILES = ["taxon.txt", "description.txt", "vernacularname.txt"]
 
 # iNaturalist license codes and their meanings
 INAT_LICENSE_MAP = {
@@ -98,70 +105,90 @@ def file_cache(cache_dir="cache"):
         return wrapper
     return decorator
 
-@st.cache_data
-def download_and_load_eflora():
-    """Loads e-Flora data from local files with Streamlit caching."""
+@st.cache_data(ttl=60*60*24*7) # Cache data for one week
+def load_eflora_data() -> Optional[pd.DataFrame]:
+    """
+    Ensures e-Flora data is available locally, downloading and extracting if necessary.
+    Then, it processes and merges the data into a single DataFrame.
+    The final DataFrame is cached for performance.
+    """
+    # 1. Ensure the local data directory exists
+    os.makedirs(DATA_DIR, exist_ok=True)
+
+    # 2. Check if all required files are already present
+    local_files_exist = all(os.path.exists(os.path.join(DATA_DIR, f)) for f in REQUIRED_FILES)
+
+    # 3. If files are missing, download and extract them
+    if not local_files_exist:
+        zip_path = os.path.join(DATA_DIR, "eflora_data.zip")
+        with st.spinner(f"Downloading e-Flora data from SANBI (~16MB)... This is a one-time setup."):
+            try:
+                # Download the ZIP file
+                with requests.get(EFLORA_ZIP_URL, stream=True) as r:
+                    r.raise_for_status()
+                    with open(zip_path, 'wb') as f:
+                        for chunk in r.iter_content(chunk_size=8192):
+                            f.write(chunk)
+
+                # Extract the ZIP file
+                with zipfile.ZipFile(zip_path, 'r') as zip_ref:
+                    zip_ref.extractall(DATA_DIR)
+
+                # Clean up the downloaded ZIP file
+                os.remove(zip_path)
+                st.success("e-Flora data downloaded and prepared successfully!")
+
+            except Exception as e:
+                st.error(f"Failed to download or process e-Flora data: {e}")
+                # Clean up failed download if it exists
+                if os.path.exists(zip_path):
+                    os.remove(zip_path)
+                return None
+
+    # 4. Load, process, and merge the data (this part is your existing logic)
     try:
-        # Check if required files exist
-        required_files = ['data/taxon.txt', 'data/vernacularname.txt', 'data/description.txt']
-        missing_files = [f for f in required_files if not os.path.exists(f)]
-        
-        if missing_files:
-            st.error(f"Missing required files: {missing_files}")
-            st.info("Please ensure the following files are in your 'data' directory:")
-            for f in required_files:
-                st.write(f"- {f}")
-            return None
-        
         st.info("Loading e-Flora database from local files...")
         
-        # Load the three main files
-        taxa_df = pd.read_csv('data/taxon.txt', sep='\t', header=0, 
+        # Load the three main files (as before)
+        taxa_df = pd.read_csv(os.path.join(DATA_DIR, 'taxon.txt'), sep='\t', header=0, 
                               usecols=['id', 'scientificName'], dtype={'id': str})
         
-        desc_df = pd.read_csv('data/description.txt', sep='\t', header=0, 
+        desc_df = pd.read_csv(os.path.join(DATA_DIR, 'description.txt'), sep='\t', header=0, 
                               usecols=['id', 'description', 'type'], dtype={'id': str})
         
-        vernacular_df = pd.read_csv('data/vernacularname.txt', sep='\t', header=0, 
+        vernacular_df = pd.read_csv(os.path.join(DATA_DIR, 'vernacularname.txt'), sep='\t', header=0, 
                                     usecols=['id', 'vernacularName'], dtype={'id': str})
         
-        # Rename id columns for consistency
+        # --- Your existing merging and processing logic (unchanged) ---
         for df in [taxa_df, desc_df]:
             df.rename(columns={'id': 'taxonID'}, inplace=True)
         vernacular_df.rename(columns={'id': 'taxonID'}, inplace=True)
         
-        # Create clean scientific names (genus + species only)
         taxa_df['cleanScientificName'] = taxa_df['scientificName'].apply(
             lambda x: ' '.join(str(x).split()[:2]) if pd.notna(x) else ''
         )
         
-        # Aggregate descriptions by type
         desc_agg = desc_df.groupby('taxonID').apply(
             lambda x: x.set_index('type')['description'].to_dict()
         ).reset_index(name='descriptions')
         
-        # Aggregate vernacular names
         vernacular_agg = vernacular_df.groupby('taxonID')['vernacularName'].apply(
             lambda x: list(set(x.dropna()))
         ).reset_index()
         
-        # Merge all data
         eflora_data = pd.merge(taxa_df, desc_agg, on='taxonID', how='left')
         eflora_data = pd.merge(eflora_data, vernacular_agg, on='taxonID', how='left')
         
-        # Set index and remove duplicates
         eflora_data.set_index('cleanScientificName', inplace=True)
         eflora_data = eflora_data[~eflora_data.index.duplicated(keep='first')]
-        
-        # Remove empty entries
         eflora_data = eflora_data[eflora_data.index != '']
-        
-        st.success(f"Loaded {len(eflora_data)} taxa from e-Flora database")
+        # --- End of your existing logic ---
+
+        st.success(f"Loaded {len(eflora_data)} taxa from e-Flora database.")
         return eflora_data
         
     except Exception as e:
-        st.error(f"Failed to load e-Flora data: {e}")
-        st.info("Make sure your data files are properly formatted with tab separation and required columns.")
+        st.error(f"Failed to load e-Flora data from local files: {e}")
         return None
 
 def format_species_name(name):
@@ -641,7 +668,7 @@ def main():
             with st.spinner("Searching GBIF database..."):
                 # Load e-Flora data if not already loaded
                 if st.session_state.eflora_data is None:
-                    st.session_state.eflora_data = download_and_load_eflora()
+                    st.session_state.eflora_data = load_eflora_data()
                 
                 if st.session_state.eflora_data is not None:
                     species_data, all_records = get_species_list_from_gbif(
@@ -661,7 +688,7 @@ def main():
         # Data diagnostics section
         with st.expander("🔧 Data Diagnostics"):
             if st.button("Test e-Flora Data", use_container_width=True):
-                eflora_data = download_and_load_eflora()
+                eflora_data = load_eflora_data()
                 if eflora_data is not None:
                     st.success(f"Successfully loaded {len(eflora_data)} taxa")
                     
