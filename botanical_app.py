@@ -76,11 +76,6 @@ st.markdown("""
         color: var(--forest-green) !important;
     }
     
-    /* IMPROVEMENT 3: Fix button text visibility in sidebar */
-    [data-testid="stSidebar"] .stButton > button {
-        color: white !important;
-    }
-    
     /* Headers */
     h1, h2, h3 {
         color: #2d5016 !important;
@@ -362,17 +357,14 @@ def get_species_images(species_name, limit=5):
         if default_photo:
             photo_url = default_photo.get('medium_url') or default_photo.get('square_url')
             if photo_url:
-                # IMPROVEMENT 4: Use attribution_name for default photo
+                # IMPROVEMENT 4: Use photo-specific user and license for default photo attribution
+                user = default_photo.get('user', {})
                 license_code = default_photo.get('license_code')
-                if license_code == 'cc0':
-                    license_name = 'CC0 1.0'
-                else:
-                    license_name = INAT_LICENSE_MAP.get(license_code, 'Unknown')
-                photographer = default_photo.get('attribution_name', 'Unknown')
+                license_name = INAT_LICENSE_MAP.get(license_code, 'Unknown')
                 if license_name != 'Unknown':
-                    caption = f"Photo by {photographer} | License: {license_name}"
+                    caption = f"Photo by {user.get('login', 'Unknown')} | License: {license_name}"
                 else:
-                    caption = f"Photo by {photographer}"
+                    caption = f"Photo by {user.get('login', 'Unknown')}"
                 photos.append({
                     'url': photo_url,
                     'caption': caption
@@ -620,7 +612,7 @@ def create_phenology_chart(phenology_data, species_name):
         y=counts,
         marker=dict(
             color='#4a7c24',
-            line=dict(color='#000000', width=1)
+            line=dict(color='#2d5016', width=1)
         )
     ))
     fig.update_layout(
@@ -630,11 +622,11 @@ def create_phenology_chart(phenology_data, species_name):
         height=400,
         plot_bgcolor='#f5f5dc',
         paper_bgcolor='white',
-        font=dict(color='#000000')
+        font=dict(color='#2d5016')
     )
-    # IMPROVEMENT 2: Ensure axis tick labels and title are black for readability
-    fig.update_xaxes(tickfont=dict(color='#000000'))
-    fig.update_yaxes(tickfont=dict(color='#000000'))
+    # IMPROVEMENT 2: Ensure axis tick labels are dark for readability
+    fig.update_xaxes(tickfont=dict(color='#2d5016'))
+    fig.update_yaxes(tickfont=dict(color='#2d5016'))
     return fig
 
 def create_species_map(records, species_list, center_lat, center_lon):
@@ -1021,7 +1013,7 @@ def main():
                         height=400,
                         plot_bgcolor='#f5f5dc',
                         paper_bgcolor='white',
-                        font=dict(color='#000000')
+                        font=dict(color='#2d5016')
                     )
                     st.plotly_chart(fig, use_container_width=True)
         
