@@ -972,10 +972,48 @@ def main():
         
         # Location settings
         st.subheader("📍 Location")
-        latitude = st.number_input("Latitude", value=-33.92, format="%.6f", 
-                                   help="Decimal latitude for search center")
-        longitude = st.number_input("Longitude", value=18.42, format="%.6f",
-                                    help="Decimal longitude for search center")
+            
+                # Use session state to store the actual coordinates being used
+                if 'current_latitude' not in st.session_state:
+                    st.session_state.current_latitude = -33.92
+                if 'current_longitude' not in st.session_state:
+                    st.session_state.current_longitude = 18.42
+                    
+                # 1. New field for pasting coordinates
+                coord_paste = st.text_input(
+                    "Paste Coordinates (Lat, Lon)", 
+                    value=f"{st.session_state.current_latitude}, {st.session_state.current_longitude}",
+                    help="Paste a single string like '-26.8974527778, 27.476825' here."
+                )
+                
+                # 2. Button to trigger parsing
+                if st.button("Apply Coordinates", key="apply_coords", use_container_width=True):
+                    try:
+                        # Attempt to parse the pasted string
+                        lat_str, lon_str = coord_paste.split(',')
+                        new_lat = float(lat_str.strip())
+                        new_lon = float(lon_str.strip())
+                        
+                        # Update session state
+                        st.session_state.current_latitude = new_lat
+                        st.session_state.current_longitude = new_lon
+                        st.success(f"Coordinates updated to: {new_lat}, {new_lon}")
+                        # Rerun to update the map and search inputs immediately
+                        st.rerun() 
+                        
+                    except ValueError:
+                        st.error("Invalid coordinate format. Please use 'Latitude, Longitude' (e.g., -26.89, 27.47).")
+                    except Exception as e:
+                        st.error(f"An unexpected error occurred: {e}")
+        
+                # 3. Use the session state values for the rest of the app
+                latitude = st.session_state.current_latitude
+                longitude = st.session_state.current_longitude
+                
+                # Display the actual values being used (optional, but good for confirmation)
+                st.markdown(f"**Current Lat:** `{latitude:.6f}`")
+                st.markdown(f"**Current Lon:** `{longitude:.6f}`")
+    
         radius_km = st.slider("Search Radius (km)", 1, 200, 25,
                               help="Radius around center point to search")
         
