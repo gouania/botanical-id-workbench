@@ -551,6 +551,16 @@ def safe_gbif_backbone(name, kingdom='Plantae'):
     """Cached and retried GBIF backbone lookup."""
     return gbif_species.name_backbone(name=name, kingdom=kingdom, verbose=False)
 
+@st.cache_data
+def get_accepted_name(key):
+    """Get accepted scientific name for a species key."""
+    try:
+        usage = gbif_species.name_usage(key=key)
+        return usage['scientificName']
+    except Exception as e:
+        logger.error(f"Failed to get name for key {key}: {e}")
+        return None
+
 # iNaturalist license codes and their meanings
 INAT_LICENSE_MAP = {
     'cc-by': 'CC BY 4.0',
@@ -720,19 +730,30 @@ def get_species_list_from_gbif(latitude, longitude, radius_km, taxon_name, recor
         progress_bar.empty()
         status_text.empty()
 
-        # Aggregate unique species
+        # Get unique species keys
+        unique_keys = list(set(str(record.get('speciesKey')) for record in all_records if record.get('speciesKey')))
+        
+        # Fetch accepted names
+        accepted_names = {}
+        for key_str in unique_keys:
+            key_int = int(key_str)
+            name = get_accepted_name(key_int)
+            if name:
+                accepted_names[key_str] = name
+
+        # Aggregate unique species by accepted name
         species_dict = {}
         for record in all_records:
-            species_name = record.get('species')
-            species_key = record.get('speciesKey')
-            if species_name and species_key:
-                if species_name not in species_dict:
-                    species_dict[species_name] = {
-                        'name': species_name, 'count': 0, 'family': record.get('family', 'Unknown'),
-                        'taxon_key': species_key, 'status_flag': status_flag, 'records': []
+            sk = str(record.get('speciesKey'))
+            if sk in accepted_names:
+                name = accepted_names[sk]
+                if name not in species_dict:
+                    species_dict[name] = {
+                        'name': name, 'count': 0, 'family': record.get('family', 'Unknown'),
+                        'taxon_key': sk, 'status_flag': status_flag, 'records': []
                     }
-                species_dict[species_name]['count'] += 1
-                species_dict[species_name]['records'].append(record)
+                species_dict[name]['count'] += 1
+                species_dict[name]['records'].append(record)
         
         species_list = sorted(species_dict.values(), key=lambda x: x['count'], reverse=True)
         return species_list, all_records
@@ -750,16 +771,19 @@ def get_local_eflora_description(scientific_name, eflora_data):
 
     # --- Helper function to find the best match in the eflora dataframe ---
     def find_best_match(name_to_check, df):
-        # Use a more robust fuzzy matching scorer that handles extra words (like author names)
-        # We search against the full, original scientific name for better accuracy
+        # First, try exact match on clean name
+        clean_to_check = ' '.join(name_to_check.split()[:2])
+        if clean_to_check in df.index:
+            return clean_to_check
+        
+        # Then, fuzzy on full names with stricter cutoff
         choices = df['scientificName'].dropna().tolist()
-        match = process.extractOne(name_to_check, choices, scorer=fuzz.WRatio, score_cutoff=85)
+        match = process.extractOne(name_to_check, choices, scorer=fuzz.WRatio, score_cutoff=95)
         
         if match:
-            # If we get a good match, find the corresponding clean name (index) to retrieve the full record
             matched_full_name = match[0]
             matched_record = df[df['scientificName'] == matched_full_name].iloc[0]
-            return matched_record.name # Return the index (clean name) of the matched record
+            return matched_record.name
         return None
 
     # --- Helper function to extract and format data ---
@@ -818,7 +842,14 @@ def get_local_eflora_description(scientific_name, eflora_data):
             return None
 
     # --- Main Logic ---
-    # 1. Try GBIF backbone to get canonical name and handle synonyms
+    # Since input is already accepted name, try direct match
+    matched_index = find_best_match(scientific_name, eflora_data)
+    if matched_index:
+        result = extract_and_format(matched_index)
+        if result:
+            return True, result
+
+    # Fallback: try GBIF backbone in case needed
     try:
         backbone_info = safe_gbif_backbone(scientific_name)
         if backbone_info and backbone_info.get('matchType') != 'NONE':
@@ -834,14 +865,7 @@ def get_local_eflora_description(scientific_name, eflora_data):
     except Exception as e:
         logger.error(f"GBIF backbone lookup failed for {scientific_name}: {e}")
 
-    # 2. Fallback: direct fuzzy match on original name
-    matched_index = find_best_match(scientific_name, eflora_data)
-    if matched_index:
-        result = extract_and_format(matched_index)
-        if result:
-            return True, result
-
-    # 3. If all lookups fail
+    # If all lookups fail
     return False, f"No description available for {scientific_name} or its accepted synonym."
 
 
