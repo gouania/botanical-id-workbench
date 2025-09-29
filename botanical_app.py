@@ -318,7 +318,7 @@ def init_session_state():
 
 init_session_state()
 
-# Optimized caching with TTL from Version 2
+# Optimized caching with TTL from Version 2, with fixed rounding logic
 def file_cache(cache_dir="cache", ttl_hours=24):
     if not os.path.exists(cache_dir):
         os.makedirs(cache_dir)
@@ -326,13 +326,24 @@ def file_cache(cache_dir="cache", ttl_hours=24):
     def decorator(func):
         @functools.wraps(func)
         def wrapper(*args, **kwargs):
+            # Handle positional arguments for rounding.
+            # We assume latitude is the 1st arg (index 0) and longitude is the 2nd (index 1)
+            # based on the function signature of get_species_list_from_gbif.
+            args_list = list(args)
+            if len(args_list) > 0 and isinstance(args_list[0], float):
+                 args_list[0] = round(args_list[0], 2)
+            if len(args_list) > 1 and isinstance(args_list[1], float):
+                 args_list[1] = round(args_list[1], 2)
+            
+            # Handle keyword arguments for rounding
             kwargs_copy = kwargs.copy()
             if 'latitude' in kwargs_copy:
                 kwargs_copy['latitude'] = round(kwargs_copy['latitude'], 2)
             if 'longitude' in kwargs_copy:
                 kwargs_copy['longitude'] = round(kwargs_copy['longitude'], 2)
             
-            cache_key = f"{func.__name__}_{'_'.join(map(str, args))}_{'_'.join(f'{k}_{v}' for k, v in sorted(kwargs_copy.items()))}"
+            # Use the modified args_list for the cache key
+            cache_key = f"{func.__name__}_{'_'.join(map(str, args_list))}_{'_'.join(f'{k}_{v}' for k, v in sorted(kwargs_copy.items()))}"
             cache_key = cache_key.replace('/', '_').replace('.', '_')[:200]
             cache_file = os.path.join(cache_dir, f"{cache_key}.pkl")
             
@@ -460,7 +471,8 @@ def get_species_images(species_name, limit=5):
         logger.error(f"Unexpected error fetching iNat images for {species_name}: {e}")
         return [], None
 
-@file_cache(cache_dir="gbif_cache", ttl_hours=48)
+# Changed cache_dir to "gbif_cache_v3" to avoid conflicts with old cache data
+@file_cache(cache_dir="gbif_cache_v3", ttl_hours=48)
 def get_species_list_from_gbif(latitude, longitude, radius_km, taxon_name, record_limit=50000):
     """Optimized GBIF query using bounding box."""
     try:
@@ -631,7 +643,8 @@ def main():
         
         if st.button("🗑️ Clear Cache", use_container_width=True):
             import shutil
-            for cache_dir in ['gbif_cache', 'cache']:
+            # Clear all known cache directories
+            for cache_dir in ['gbif_cache', 'gbif_cache_v3', 'cache']:
                 if os.path.exists(cache_dir):
                     shutil.rmtree(cache_dir)
             st.cache_data.clear()
