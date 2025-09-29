@@ -25,6 +25,11 @@ from PIL import Image
 import io
 import urllib.parse
 
+# Global headers for iNaturalist API requests
+INAT_HEADERS = {
+    'User-Agent': 'BotanicalWorkbench/1.0 (contact: daniel.cahen.substance@gmail.com)'  # Replace with your actual email
+}
+
 # Configure page with botanical theme
 st.set_page_config(
     page_title="Botanical Identification Workbench (South Africa edition)",
@@ -551,16 +556,6 @@ def safe_gbif_backbone(name, kingdom='Plantae'):
     """Cached and retried GBIF backbone lookup."""
     return gbif_species.name_backbone(name=name, kingdom=kingdom, verbose=False)
 
-@st.cache_data
-def get_accepted_name(key):
-    """Get accepted scientific name for a species key."""
-    try:
-        usage = gbif_species.name_usage(key=key)
-        return usage['scientificName']
-    except Exception as e:
-        logger.error(f"Failed to get name for key {key}: {e}")
-        return None
-
 # iNaturalist license codes and their meanings
 INAT_LICENSE_MAP = {
     'cc-by': 'CC BY 4.0',
@@ -581,19 +576,15 @@ def get_species_images(species_name, limit=5):
     Fetch iNaturalist photos with proper attribution (photographer name and license).
     Returns a list of photo dictionaries with URL, photographer, and license info.
     """
-    headers = {
-        'User-Agent': 'BotanicalWorkbench/1.0 (contact: daniel.cahen.substance@gmail.com)'  # Replace with your actual contact info
-    }
-    
     try:
         # Search for taxon ID
         encoded_name = urllib.parse.quote(species_name)
         search_url = f"https://api.inaturalist.org/v1/taxa/autocomplete?q={encoded_name}&per_page=1"
-        response = requests.get(search_url, headers=headers, timeout=10)
+        response = requests.get(search_url, headers=INAT_HEADERS, timeout=10)
         
         # Add basic error handling for debugging
         if response.status_code != 200:
-            st.warning(f"API error for taxon search ({response.status_code}): {response.text[:200]}")
+            logger.warning(f"API error for taxon search ({response.status_code}): {response.text[:200]}")
             return [], None
             
         data = response.json()
@@ -637,11 +628,11 @@ def get_species_images(species_name, limit=5):
         
         # Fetch observations with photos
         obs_url = f"https://api.inaturalist.org/v1/observations?taxon_id={taxon_id}&photos=true&per_page={limit}&order_by=votes&order=desc"
-        obs_response = requests.get(obs_url, headers=headers, timeout=10)
+        obs_response = requests.get(obs_url, headers=INAT_HEADERS, timeout=10)
         
         # Add error handling
         if obs_response.status_code != 200:
-            st.warning(f"API error for observations ({obs_response.status_code}): {obs_response.text[:200]}")
+            logger.warning(f"API error for observations ({obs_response.status_code}): {obs_response.text[:200]}")
         
         obs_data = obs_response.json()
         
@@ -745,30 +736,19 @@ def get_species_list_from_gbif(latitude, longitude, radius_km, taxon_name, recor
         progress_bar.empty()
         status_text.empty()
 
-        # Get unique species keys
-        unique_keys = list(set(str(record.get('speciesKey')) for record in all_records if record.get('speciesKey')))
-        
-        # Fetch accepted names
-        accepted_names = {}
-        for key_str in unique_keys:
-            key_int = int(key_str)
-            name = get_accepted_name(key_int)
-            if name:
-                accepted_names[key_str] = name
-
-        # Aggregate unique species by accepted name
+        # Aggregate unique species
         species_dict = {}
         for record in all_records:
-            sk = str(record.get('speciesKey'))
-            if sk in accepted_names:
-                name = accepted_names[sk]
-                if name not in species_dict:
-                    species_dict[name] = {
-                        'name': name, 'count': 0, 'family': record.get('family', 'Unknown'),
-                        'taxon_key': sk, 'status_flag': status_flag, 'records': []
+            species_name = record.get('species')
+            species_key = record.get('speciesKey')
+            if species_name and species_key:
+                if species_name not in species_dict:
+                    species_dict[species_name] = {
+                        'name': species_name, 'count': 0, 'family': record.get('family', 'Unknown'),
+                        'taxon_key': species_key, 'status_flag': status_flag, 'records': []
                     }
-                species_dict[name]['count'] += 1
-                species_dict[name]['records'].append(record)
+                species_dict[species_name]['count'] += 1
+                species_dict[species_name]['records'].append(record)
         
         species_list = sorted(species_dict.values(), key=lambda x: x['count'], reverse=True)
         return species_list, all_records
@@ -778,111 +758,97 @@ def get_species_list_from_gbif(latitude, longitude, radius_km, taxon_name, recor
         return [], []
 
 def get_local_eflora_description(scientific_name, eflora_data):
-    """
-    Get description from local e-Flora data, with robust fuzzy matching and synonym lookup.
-    """
+    """Get description from local e-Flora data with fuzzy matching."""
     if eflora_data is None:
         return False, "e-Flora data not available"
-
-    # --- Helper function to find the best match in the eflora dataframe ---
-    def find_best_match(name_to_check, df):
-        # First, try exact match on clean name
-        clean_to_check = ' '.join(name_to_check.split()[:2])
-        if clean_to_check in df.index:
-            return clean_to_check
+    
+    clean_name = format_species_name(scientific_name)
+    
+    # Try exact match first
+    if clean_name in eflora_data.index:
+        matched_name = clean_name
+    else:
+        # Try fuzzy matching
+        matches = process.extractOne(clean_name, eflora_data.index, scorer=fuzz.token_sort_ratio)
+        if matches and matches[1] >= 90:  # 90% similarity threshold
+            matched_name = matches[0]
+        else:
+            return False, f"Species {clean_name} not found in local database"
+    
+    try:
+        # Retrieve the matched row
+        row = eflora_data.loc[matched_name]
+        descriptions = row['descriptions']
+        vernacular_raw = row['vernacularName']
+        full_scientific_name = row['scientificName']
         
-        # Then, fuzzy on full names with stricter cutoff
-        choices = df['scientificName'].dropna().tolist()
-        match = process.extractOne(name_to_check, choices, scorer=fuzz.WRatio, score_cutoff=95)
-        
-        if match:
-            matched_full_name = match[0]
-            matched_record = df[df['scientificName'] == matched_full_name].iloc[0]
-            return matched_record.name
-        return None
-
-    # --- Helper function to extract and format data ---
-    def extract_and_format(matched_clean_name, original_search_name=None, is_synonym=False):
-        try:
-            row = eflora_data.loc[matched_clean_name]
-            descriptions = row['descriptions']
-            vernacular_raw = row['vernacularName']
-            full_scientific_name = row['scientificName']
-            
-            # Handle vernacular names
+        # Handle vernacular names safely
+        if isinstance(vernacular_raw, list):
+            vernacular_names = [str(n).strip() for n in vernacular_raw if pd.notna(n) and str(n).strip()]
+        elif isinstance(vernacular_raw, str):
+            vernacular_names = [vernacular_raw.strip()] if vernacular_raw.strip() else []
+        else:
             vernacular_names = []
-            if isinstance(vernacular_raw, list):
-                vernacular_names = [str(n).strip() for n in vernacular_raw if pd.notna(n) and str(n).strip()]
-            
-            if not isinstance(descriptions, dict) or not descriptions:
-                return None
+        
+        # Check if descriptions is a valid dictionary
+        if not isinstance(descriptions, dict) or not descriptions:
+            return False, f"No description available for {clean_name}"
 
-            # Build description text, indicating if a synonym was used
-            if original_search_name and original_search_name != full_scientific_name:
-                synonym_note = " - Synonym" if is_synonym else ""
-                name_display = f"**Scientific Name:** {full_scientific_name} (Searched as: *{original_search_name}*{synonym_note})"
-            else:
-                name_display = f"**Scientific Name:** {full_scientific_name}"
-            
-            extracted_data = [name_display]
-            if vernacular_names:
-                extracted_data.append(f"**Common Names:** {', '.join(vernacular_names[:5])}")
+        # Build description with priority sections
+        extracted_data = [f"**Scientific Name:** {full_scientific_name}"]
+        
+        if vernacular_names:
+            extracted_data.append(f"**Common Names:** {', '.join(vernacular_names[:5])}")
 
-            priority_sections = ["Morphological description", "Diagnostic characters", "Habitat", "Distribution", "Morphology", "Diagnostic", "Description", "Characters"]
-            sections_added = 0
-            for section in priority_sections:
-                if section in descriptions and pd.notna(descriptions[section]):
-                    desc_text = str(descriptions[section]).strip()
+        # Priority sections in order of importance
+        priority_sections = [
+            "Morphological description", 
+            "Diagnostic characters", 
+            "Habitat", 
+            "Distribution",
+            "Morphology",
+            "Diagnostic",
+            "Description",
+            "Characters"
+        ]
+        
+        sections_added = 0
+        for section in priority_sections:
+            if section in descriptions and pd.notna(descriptions[section]):
+                desc_text = str(descriptions[section]).strip()
+                if desc_text and len(desc_text) > 10:
+                    extracted_data.append(f"**{section}:**\n{desc_text}")
+                    sections_added += 1
+                    if sections_added >= 4:
+                        break
+        
+        # If no priority sections found, add any available sections
+        if sections_added == 0:
+            for section, desc in descriptions.items():
+                if pd.notna(desc):
+                    desc_text = str(desc).strip()
                     if desc_text and len(desc_text) > 10:
                         extracted_data.append(f"**{section}:**\n{desc_text}")
                         sections_added += 1
-                        if sections_added >= 4: break
-            
-            if sections_added == 0:
-                for section, desc in descriptions.items():
-                    if pd.notna(desc) and len(str(desc).strip()) > 10:
-                        extracted_data.append(f"**{section}:**\n{str(desc).strip()}")
-                        sections_added += 1
-                        if sections_added >= 2: break
-            
-            if sections_added == 0:
-                return None
+                        if sections_added >= 2:
+                            break
+        
+        if sections_added == 0:
+            return False, f"No detailed descriptions available for {clean_name}"
 
-            # Add citation
-            extracted_data.append("\n**Citation:** e-Flora of South Africa. v1.42. 2023. South African National Biodiversity Institute. http://ipt.sanbi.org.za/iptsanbi/resource?r=flora_descriptions&v=1.42")
-            extracted_data.append("**License:** CC-BY 4.0")
+        # Add e-Flora citation
+        extracted_data.append(
+            "\n**Citation:** e-Flora of South Africa. v1.42. 2023. South African National Biodiversity Institute. http://ipt.sanbi.org.za/iptsanbi/resource?r=flora_descriptions&v=1.42"
+        )
+        extracted_data.append(
+            "**License:** CC-BY 4.0"
+        )
             
-            return "\n\n".join(extracted_data)
-        except Exception:
-            return None
-
-    # --- Main Logic ---
-    # Since input is already accepted name, try direct match
-    matched_index = find_best_match(scientific_name, eflora_data)
-    if matched_index:
-        result = extract_and_format(matched_index)
-        if result:
-            return True, result
-
-    # Fallback: try GBIF backbone in case needed
-    try:
-        backbone_info = safe_gbif_backbone(scientific_name)
-        if backbone_info and backbone_info.get('matchType') != 'NONE':
-            is_synonym = backbone_info.get('synonym', False)
-            search_name = backbone_info.get('acceptedScientificName') if is_synonym else backbone_info.get('scientificName', scientific_name)
-            original_search_name = scientific_name if is_synonym else None
-            
-            matched_index = find_best_match(search_name, eflora_data)
-            if matched_index:
-                result = extract_and_format(matched_index, original_search_name=original_search_name, is_synonym=is_synonym)
-                if result:
-                    return True, result
+        return True, "\n\n".join(extracted_data)
+        
     except Exception as e:
-        logger.error(f"GBIF backbone lookup failed for {scientific_name}: {e}")
-
-    # If all lookups fail
-    return False, f"No description available for {scientific_name} or its accepted synonym."
-
+        st.error(f"Error processing {clean_name}: {e}")
+        return False, f"Error retrieving data for {clean_name}"
 
 def create_species_map(records, species_list, center_lat, center_lon):
     """Create an interactive map with species observations."""
@@ -1058,8 +1024,6 @@ def main():
                     import shutil
                     shutil.rmtree(cache_dir)
             st.success("Cache cleared!")
-            st.cache_data.clear()
-            st.cache_resource.clear()
     
     # Main content area
     if st.session_state.species_data is None:
@@ -1108,7 +1072,7 @@ def main():
             df = df[df['name'].str.strip() != '']
             df_display = df[['name', 'family', 'count']].copy()
             df_display.columns = ['Species', 'Family', 'Records']
-            st.dataframe(df_display, use_container_width=True, height=300, hide_index=True)
+            st.dataframe(df_display, use_container_width=True, height=300)
             
             # Selection controls
             st.subheader("Select Species for Detailed Analysis")
@@ -1172,7 +1136,7 @@ def main():
                                     if success:
                                         st.markdown(description)
                                     else:
-                                        st.warning(description) # Show the reason it failed
+                                        st.warning(f"No local description available")
                                         st.markdown(f"**Scientific Name:** {species['name']}")
                                         st.markdown(f"**Family:** {species['family']}")
                                         st.markdown(f"**GBIF Records:** {species['count']}")
@@ -1187,7 +1151,7 @@ def main():
                                                 st.markdown("**Photos from iNaturalist:**")
                                                 for img_data in images_data[:3]:  # Limit to 3 images
                                                     try:
-                                                        response = requests.get(img_data['url'], headers=headers, timeout=10)  # Add headers here too
+                                                        response = requests.get(img_data['url'], headers=INAT_HEADERS, timeout=10)
                                                         if response.status_code != 200:
                                                             st.warning(f"Failed to load image (HTTP {response.status_code})")
                                                             continue
@@ -1195,12 +1159,12 @@ def main():
                                                         
                                                         # Display image with caption
                                                         st.image(img, caption=img_data['caption'], 
-                                                                 use_container_width=True)
+                                                               use_container_width=True)
                                                         
                                                         st.markdown(" ")
                                                         
                                                     except Exception as e:
-                                                        st.warning(f"Failed to load image: {e}")
+                                                        st.warning(f"Failed to load image: {str(e)[:100]}")  # Truncate long errors
                                                 
                                                 # Link to iNaturalist
                                                 if taxon_id:
@@ -1267,7 +1231,7 @@ def main():
                     )
                     
                     with st.expander("Preview JSON"):
-                        st.code(json_str, language='json')
+                        st.json(export_data)
                 
                 else:
                     # Markdown export
@@ -1311,7 +1275,7 @@ def main():
                     )
                     
                     with st.expander("Preview Markdown"):
-                        st.code(markdown_str, language='markdown')
+                        st.markdown(markdown_str)
             else:
                 st.warning("Please select species in the Species List tab first")
 
