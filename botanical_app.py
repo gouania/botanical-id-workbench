@@ -45,17 +45,18 @@ st.markdown("""
         --cream: #f5f5dc;
     }
     
-    /* Sidebar styling (This is overridden in Streamlit Dark Mode) */
+    /* Sidebar styling (Sets the light background) */
     [data-testid="stSidebar"] {
         background: linear-gradient(180deg, #e8f0e3 0%, #f5f5dc 100%);
     }
 
-    /* IMPROVEMENT 1: Fix low contrast for sidebar input labels (e.g., Latitude, Longitude) 
-       This targets labels and generic text inside the sidebar to ensure readability in Dark Mode. */
+    /* IMPROVEMENT 1: Fix low contrast for ALL sidebar text/labels in Light Mode.
+       Force all relevant text elements inside the sidebar to use the dark forest green color. */
     [data-testid="stSidebar"] label, 
     [data-testid="stSidebar"] .st-emotion-cache-16idsys, /* Common Streamlit text element for labels */
-    [data-testid="stSidebar"] .st-emotion-cache-10trblm { /* Another common Streamlit text element */
-        color: var(--light-moss) !important;
+    [data-testid="stSidebar"] .st-emotion-cache-10trblm, /* Another common Streamlit text element */
+    [data-testid="stSidebar"] .st-emotion-cache-1f1g6o9 { /* Targets the generic text/labels like "Taxon Name" */
+        color: var(--forest-green) !important; /* Forces dark color against light background */
     }
     
     /* Headers */
@@ -69,9 +70,8 @@ st.markdown("""
         font-weight: 600;
     }
     
-    /* Reverted: Keeping original color for Metric Labels */
     [data-testid="stMetricLabel"] {
-        color: #6b5b4a !important; /* Original color */
+        color: #6b5b4a !important;
     }
     
     /* Buttons */
@@ -106,10 +106,9 @@ st.markdown("""
         border-radius: 8px;
     }
     
-    /* Reverted: Keeping original color for unselected tabs */
     .stTabs [data-baseweb="tab"] {
         background-color: transparent;
-        color: #6b5b4a; /* Original color */
+        color: #6b5b4a;
         border-radius: 6px;
         padding: 8px 16px;
     }
@@ -343,7 +342,6 @@ def get_species_images(species_name, limit=5):
             if photo_url:
                 # Use the taxon's attribution field for the default photo
                 attribution_text = taxon.get('attribution', 'Unknown')
-                # IMPROVEMENT 2: Include attribution for default photo
                 caption = f"Default photo | Attribution: {attribution_text}"
                 photos.append({
                     'url': photo_url,
@@ -362,7 +360,7 @@ def get_species_images(species_name, limit=5):
                     license_code = photo.get('license_code')
                     license_name = INAT_LICENSE_MAP.get(license_code, 'Unknown')
                     
-                    # IMPROVEMENT 2: Ensure photographer and license are in caption
+                    # Ensure photographer and license are in caption
                     if license_name != 'Unknown':
                         caption = f"Photo by {user.get('login', 'Unknown')} | License: {license_name}"
                     else:
@@ -695,7 +693,6 @@ def create_species_map(records, species_list, center_lat, center_lon):
 # --- START: Creator Acknowledgment Function ---
 def add_footer():
     """Adds a fixed footer with creator and copyright information."""
-    # IMPROVEMENT 3: Set logical copyright info (current year, MIT License) and acknowledgment
     st.markdown(f"""
     <div class="footer">
         Created by **Daniel Cahen** | Copyright © {datetime.now().year} | Licensed under the MIT License
@@ -918,20 +915,20 @@ def main():
                                     with col2:
                                         # Multiple iNaturalist images if enabled
                                         with st.spinner("Fetching images..."):
-                                            # IMPROVEMENT 2: Get taxon_id for link
+                                            # Get taxon_id for link
                                             images_data, taxon_id = get_species_images(species['name'])
                                             if images_data:
                                                 for img_data in images_data:
                                                     try:
                                                         response = requests.get(img_data['url'], timeout=10)
                                                         img = Image.open(io.BytesIO(response.content))
-                                                        # IMPROVEMENT 2: Caption includes photographer and license
+                                                        # Caption includes photographer and license
                                                         st.image(img, caption=img_data['caption'], use_container_width=True)
                                                     except:
                                                         st.warning("Failed to load one or more images")
                                                 st.caption(f"Showing top {len(images_data)} iNaturalist photos (default + top-voted)")
                                                 
-                                                # IMPROVEMENT 2: Provide link to all iNaturalist images
+                                                # Provide link to all iNaturalist images
                                                 if taxon_id:
                                                     inat_link = f"https://www.inaturalist.org/taxa/{taxon_id}/browse_photos"
                                                     st.markdown(f"[View all iNaturalist images for {species['name']} ↗]({inat_link})")
@@ -960,7 +957,7 @@ def main():
         with tab3:
             st.subheader("📈 Search Statistics")
             
-            if st.session_state.species_data:
+            if st.session_session.species_data:
                 # Summary statistics
                 col1, col2, col3, col4 = st.columns(4)
                 
@@ -1095,7 +1092,7 @@ def main():
             else:
                 st.warning("No species selected for export. Please select species in the Species List tab.")
 
-    # IMPROVEMENT 3: Add the footer for creator acknowledgment and copyright
+    # Add the footer for creator acknowledgment and copyright
     add_footer()
 
 if __name__ == "__main__":
