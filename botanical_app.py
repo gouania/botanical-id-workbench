@@ -1076,4 +1076,203 @@ def main():
             with col1:
                 if st.button("Select All", use_container_width=True):
                     st.session_state.species_selector = st.session_state.species_options[:]
-   
+                    st.rerun()
+            with col2:
+                if st.button("Clear Selection", use_container_width=True):
+                    st.session_state.species_selector = []
+                    st.rerun()
+            with col3:
+                if st.button("Top 10", use_container_width=True):
+                    st.session_state.species_selector = st.session_state.species_options[:10]
+                    st.rerun()
+            
+            # Multiselect for species selection
+            selected_labels = st.multiselect(
+                "Select species:",
+                st.session_state.species_options,
+                key="species_selector",
+                format_func=lambda x: x
+            )
+            
+            # Map selected labels back to species names
+            selected_names = []
+            for label in selected_labels:
+                name = label.split(' - ')[0]
+                selected_names.append(name)
+            
+            st.session_state.selected_species = {name: True for name in selected_names}
+            
+            # Process selected species
+            if len(selected_names) > 0:
+                st.info(f"Selected {len(selected_names)} species for analysis")
+                
+                if st.button("📊 Generate Detailed Analysis", type="primary", use_container_width=True):
+                    selected_species_data = [
+                        sp for sp in st.session_state.species_data 
+                        if sp['name'] in selected_names
+                    ]
+                    
+                    with st.spinner("Processing selected species..."):
+                        st.subheader("🔍 Detailed Species Information")
+                        
+                        for species in selected_species_data[:10]:
+                            with st.expander(f"📋 {species['name']} - {species['family']} ({species['count']} records)", expanded=True):
+                                if include_images:
+                                    col1, col2 = st.columns([3, 1])
+                                else:
+                                    col1 = st.columns([1])[0]
+                                
+                                with col1:
+                                    # Get description
+                                    success, description = get_local_eflora_description(
+                                        species['name'], st.session_state.eflora_data
+                                    )
+                                    
+                                    if success:
+                                        st.markdown(description)
+                                    else:
+                                        st.warning(description) # Show the reason it failed
+                                        st.markdown(f"**Scientific Name:** {species['name']}")
+                                        st.markdown(f"**Family:** {species['family']}")
+                                        st.markdown(f"**GBIF Records:** {species['count']}")
+                                
+                                if include_images:
+                                    with col2:
+                                        # Display iNaturalist images with attribution
+                                        with st.spinner("Loading images..."):
+                                            images_data, taxon_id = get_species_images(species['name'])
+                                            
+                                            if images_data:
+                                                st.markdown("**Photos from iNaturalist:**")
+                                                for img_data in images_data[:3]:  # Limit to 3 images
+                                                    try:
+                                                        response = requests.get(img_data['url'], timeout=10)
+                                                        img = Image.open(io.BytesIO(response.content))
+                                                        
+                                                        # Display image with caption
+                                                        st.image(img, caption=img_data['caption'], 
+                                                               use_container_width=True)
+                                                        
+                                                        st.markdown(" ")
+                                                        
+                                                    except Exception as e:
+                                                        st.warning(f"Failed to load image")
+                                                
+                                                # Link to iNaturalist
+                                                if taxon_id:
+                                                    inat_link = f"https://www.inaturalist.org/taxa/{taxon_id}"
+                                                    st.markdown(f"[View on iNaturalist ↗]({inat_link})")
+                                            else:
+                                                st.info("No photos available")
+        
+        with tab2:
+            st.subheader("🗺️ Species Distribution Map")
+            if hasattr(st.session_state, 'all_records'):
+                species_map = create_species_map(
+                    st.session_state.all_records,
+                    st.session_state.species_data,
+                    latitude,
+                    longitude
+                )
+                st_folium(species_map, height=600, width=700)
+                st.info("🎯 Red marker = search center | Colored dots = species observations")
+            else:
+                st.warning("Map data not available")
+        
+        with tab3:
+            st.subheader("📄 Export Data")
+            
+            selected_species_data = [
+                sp for sp in st.session_state.species_data 
+                if sp['name'] in st.session_state.selected_species
+            ]
+            
+            if selected_species_data:
+                if export_format == "JSON":
+                    # JSON export
+                    export_data = {
+                        "metadata": {
+                            "location": {"latitude": latitude, "longitude": longitude},
+                            "radius_km": radius_km,
+                            "taxon_searched": taxon_name,
+                            "selected_species_count": len(selected_species_data),
+                            "timestamp": datetime.now().isoformat()
+                        },
+                        "species": []
+                    }
+                    
+                    for species in selected_species_data:
+                        success, description = get_local_eflora_description(
+                            species['name'], st.session_state.eflora_data
+                        )
+                        
+                        export_data["species"].append({
+                            "name": species['name'],
+                            "family": species['family'],
+                            "gbif_count": species['count'],
+                            "description": description if success else "No description available"
+                        })
+                    
+                    json_str = json.dumps(export_data, indent=2)
+                    st.download_button(
+                        label="📥 Download JSON",
+                        data=json_str,
+                        file_name=f"botanical_data_{datetime.now().strftime('%Y%m%d_%H%M')}.json",
+                        mime="application/json",
+                        use_container_width=True
+                    )
+                    
+                    with st.expander("Preview JSON"):
+                        st.json(export_data)
+                
+                else:
+                    # Markdown export
+                    markdown_parts = [
+                        f"# Botanical Identification Report",
+                        f"",
+                        f"**Location:** {latitude}, {longitude}",
+                        f"**Search Radius:** {radius_km} km",
+                        f"**Target Taxon:** {taxon_name}",
+                        f"**Generated:** {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}",
+                        f"**Selected Species:** {len(selected_species_data)}",
+                        f"",
+                        f"## Species Details",
+                        f""
+                    ]
+                    
+                    for species in selected_species_data:
+                        success, description = get_local_eflora_description(
+                            species['name'], st.session_state.eflora_data
+                        )
+                        
+                        markdown_parts.extend([
+                            f"### {species['name']}",
+                            f"**Family:** {species['family']}",
+                            f"**GBIF Records:** {species['count']}",
+                            f"",
+                            description if success else "No description available.",
+                            f"",
+                            "---",
+                            f""
+                        ])
+                    
+                    markdown_str = "\n".join(markdown_parts)
+                    
+                    st.download_button(
+                        label="📥 Download Markdown Report",
+                        data=markdown_str,
+                        file_name=f"botanical_report_{datetime.now().strftime('%Y%m%d_%H%M')}.md",
+                        mime="text/markdown",
+                        use_container_width=True
+                    )
+                    
+                    with st.expander("Preview Markdown"):
+                        st.markdown(markdown_str)
+            else:
+                st.warning("Please select species in the Species List tab first")
+
+    # Add footer
+    add_footer()
+
+if __name__ == "__main__":
+    main()
