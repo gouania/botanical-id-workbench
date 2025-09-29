@@ -349,7 +349,7 @@ def get_species_images(species_name, limit=5):
 
 @file_cache(cache_dir="gbif_cache", ttl_hours=48)
 def get_species_list_from_gbif(latitude, longitude, radius_km, taxon_name, record_limit=50000):
-    """Optimized GBIF query with better progress tracking."""
+    """Optimized GBIF query with WKT POLYGON for robust location searching."""
     try:
         # Backbone match
         taxon_info = safe_gbif_backbone(taxon_name)
@@ -361,14 +361,19 @@ def get_species_list_from_gbif(latitude, longitude, radius_km, taxon_name, recor
         synonym = taxon_info.get('synonym', False)
         status_flag = f" ({status}{' - Synonym' if synonym else ''})" if status != 'ACCEPTED' else ""
 
-        # Calculate bounding box
+        # Calculate bounding box coordinates
         lat_offset = radius_km / 111.32
         lon_offset = radius_km / (111.32 * abs(math.cos(math.radians(latitude))))
         
+        min_lat, max_lat = latitude - lat_offset, latitude + lat_offset
+        min_lon, max_lon = longitude - lon_offset, longitude + lon_offset
+
+        # Define search area using Well-Known Text (WKT) POLYGON for robustness.
+        wkt_polygon = f'POLYGON(({min_lon} {min_lat}, {max_lon} {min_lat}, {max_lon} {max_lat}, {min_lon} {max_lat}, {min_lon} {min_lat}))'
+
         params = {
             'taxonKey': search_taxon_key,
-            'decimalLatitude': f'{latitude - lat_offset},{latitude + lat_offset}',
-            'decimalLongitude': f'{longitude - lon_offset},{longitude + lon_offset}',
+            'geometry': wkt_polygon, # Using WKT Polygon instead of lat/lon ranges
             'hasCoordinate': True,
             'hasGeospatialIssue': False,
             'limit': 300
@@ -376,7 +381,6 @@ def get_species_list_from_gbif(latitude, longitude, radius_km, taxon_name, recor
 
         all_records = []
         offset = 0
-        batch_count = 0
         
         while offset < record_limit:
             params['offset'] = offset
@@ -388,9 +392,8 @@ def get_species_list_from_gbif(latitude, longitude, radius_km, taxon_name, recor
                     break
                 
                 all_records.extend(batch)
-                batch_count += 1
                 
-                if len(batch) < 300 or len(all_records) >= 100000:
+                if len(batch) < 300 or len(all_records) >= record_limit:
                     break
                 
                 offset += len(batch)
@@ -400,7 +403,7 @@ def get_species_list_from_gbif(latitude, longitude, radius_km, taxon_name, recor
                 logger.error(f"Error fetching GBIF batch: {e}")
                 break
 
-        # Aggregate species efficiently using dictionary
+        # Aggregate species efficiently using a dictionary
         species_dict = {}
         for record in all_records:
             species_name = record.get('species')
