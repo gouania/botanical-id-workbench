@@ -1,8 +1,3 @@
-This is a great request. I will implement the creator acknowledgment, improve the contrast based on common issues in the provided CSS, and enhance the iNaturalist image display with attribution and links.
-
-Here is the improved code:
-
-```python
 import streamlit as st
 import pandas as pd
 import pygbif.species as gbif_species
