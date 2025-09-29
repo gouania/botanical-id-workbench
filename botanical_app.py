@@ -349,7 +349,7 @@ def get_species_images(species_name, limit=5):
 
 @file_cache(cache_dir="gbif_cache", ttl_hours=48)
 def get_species_list_from_gbif(latitude, longitude, radius_km, taxon_name, record_limit=50000):
-    """Optimized GBIF query with WKT POLYGON for robust location searching."""
+    """Optimized GBIF query with WKT POLYGON and correct boolean formatting."""
     try:
         # Backbone match
         taxon_info = safe_gbif_backbone(taxon_name)
@@ -373,9 +373,9 @@ def get_species_list_from_gbif(latitude, longitude, radius_km, taxon_name, recor
 
         params = {
             'taxonKey': search_taxon_key,
-            'geometry': wkt_polygon, # Using WKT Polygon instead of lat/lon ranges
-            'hasCoordinate': True,
-            'hasGeospatialIssue': False,
+            'geometry': wkt_polygon,
+            'hasCoordinate': 'true',  # FIX: Pass boolean as lowercase string
+            'hasGeospatialIssue': 'false', # FIX: Pass boolean as lowercase string
             'limit': 300
         }
 
