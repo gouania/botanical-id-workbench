@@ -374,8 +374,8 @@ def get_species_list_from_gbif(latitude, longitude, radius_km, taxon_name, recor
         params = {
             'taxonKey': search_taxon_key,
             'geometry': wkt_polygon,
-            'hasCoordinate': 'true',  # FIX: Pass boolean as lowercase string
-            'hasGeospatialIssue': 'false', # FIX: Pass boolean as lowercase string
+            'hasCoordinate': True,      # Fixed: Use boolean True
+            'hasGeospatialIssue': False, # Fixed: Use boolean False
             'limit': 300
         }
 
