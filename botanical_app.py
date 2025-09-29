@@ -64,6 +64,18 @@ st.markdown("""
         color: var(--forest-green) !important; /* Forces dark color against light background */
     }
     
+    /* Additional broad targeting for sidebar text elements to catch any missed ones */
+    [data-testid="stSidebar"] span,
+    [data-testid="stSidebar"] div[class*="st-emotion-cache"],
+    [data-testid="stSidebar"] p {
+        color: var(--forest-green) !important;
+    }
+    
+    /* Ensure expander content text is dark */
+    [data-testid="stSidebar"] .streamlit-expanderContent {
+        color: var(--forest-green) !important;
+    }
+    
     /* Headers */
     h1, h2, h3 {
         color: #2d5016 !important;
@@ -345,10 +357,14 @@ def get_species_images(species_name, limit=5):
         if default_photo:
             photo_url = default_photo.get('medium_url') or default_photo.get('square_url')
             if photo_url:
-                # Use the taxon's attribution field for the default photo
-                attribution_text = taxon.get('attribution', 'Unknown')
-                # IMPROVEMENT 2: Ensure photographer and license are in caption
-                caption = f"Default photo | Attribution: {attribution_text}"
+                # IMPROVEMENT 4: Use photo-specific user and license for default photo attribution
+                user = default_photo.get('user', {})
+                license_code = default_photo.get('license_code')
+                license_name = INAT_LICENSE_MAP.get(license_code, 'Unknown')
+                if license_name != 'Unknown':
+                    caption = f"Photo by {user.get('login', 'Unknown')} | License: {license_name}"
+                else:
+                    caption = f"Photo by {user.get('login', 'Unknown')}"
                 photos.append({
                     'url': photo_url,
                     'caption': caption
@@ -366,7 +382,7 @@ def get_species_images(species_name, limit=5):
                     license_code = photo.get('license_code')
                     license_name = INAT_LICENSE_MAP.get(license_code, 'Unknown')
                     
-                    # IMPROVEMENT 2: Ensure photographer and license are in caption
+                    # IMPROVEMENT 4: Ensure photographer and license are in caption
                     if license_name != 'Unknown':
                         caption = f"Photo by {user.get('login', 'Unknown')} | License: {license_name}"
                     else:
@@ -608,6 +624,9 @@ def create_phenology_chart(phenology_data, species_name):
         paper_bgcolor='white',
         font=dict(color='#2d5016')
     )
+    # IMPROVEMENT 2: Ensure axis tick labels are dark for readability
+    fig.update_xaxes(tickfont=dict(color='#2d5016'))
+    fig.update_yaxes(tickfont=dict(color='#2d5016'))
     return fig
 
 def create_species_map(records, species_list, center_lat, center_lon):
@@ -701,7 +720,7 @@ def add_footer():
     """Adds a fixed footer with creator and copyright information."""
     st.markdown(f"""
     <div class="footer">
-        Created by **Daniel Cahen** | Copyright © {datetime.now().year} | Licensed under the MIT License
+        Created by Daniel Cahen | Copyright © {datetime.now().year} | Licensed under the MIT License
     </div>
     """, unsafe_allow_html=True)
 # --- END: Creator Acknowledgment Function ---
