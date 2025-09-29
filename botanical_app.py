@@ -33,11 +33,25 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# --- START: Improved CSS with better contrast and professional styling ---
+# --- START: Bullet-proof CSS with theme-adaptive contrast and professional styling ---
 st.markdown("""
 <style>
-    /* Main color scheme - Professional earth tones with high contrast */
+    /* Theme-adaptive CSS variables for light/dark modes */
     :root {
+        /* Light theme defaults (matching Streamlit light theme) */
+        --text-primary: #1a1a1a;
+        --text-secondary: #4a4a4a;
+        --bg-primary: #ffffff;
+        --bg-secondary: #f0f2f6;
+        --input-bg: #ffffff;
+        --table-bg: #f9f9f5;
+        --table-header-bg: #e8e8e8;
+        --sidebar-gradient: linear-gradient(180deg, #ffffff 0%, #f9f9f5 100%);
+        --alert-bg: #ffffff;
+        --border-color: #d0d0d0;
+        --shadow-color: rgba(0,0,0,0.1);
+        
+        /* Botanical accents (kept consistent across themes) */
         --dark-green: #1a3d07;
         --forest-green: #2d5016;
         --sage-green: #5a7c3d;
@@ -45,56 +59,47 @@ st.markdown("""
         --earth-brown: #4a3c28;
         --light-background: #f9f9f5;
         --cream: #fffef9;
-        --text-primary: #1a1a1a;
-        --text-secondary: #4a4a4a;
     }
     
-    /* Global text color to ensure readability */
+    @media (prefers-color-scheme: dark) {
+        :root {
+            /* Dark theme overrides (matching Streamlit dark theme) */
+            --text-primary: #ffffff;
+            --text-secondary: #e0e0e0;
+            --bg-primary: #0e1117;
+            --bg-secondary: #262730;
+            --input-bg: #262730;
+            --table-bg: #1a1a1a;
+            --table-header-bg: #2a2a2a;
+            --sidebar-gradient: linear-gradient(180deg, #262730 0%, #1a1a1a 100%);
+            --alert-bg: #1a1a1a;
+            --border-color: #404040;
+            --shadow-color: rgba(0,0,0,0.3);
+        }
+    }
+    
+    /* Global app styling with theme vars for high contrast */
     .stApp {
+        color: var(--text-primary);
+        background-color: var(--bg-primary);
+        font-family: 'Arial', sans-serif;
+    }
+    
+    /* Main container background */
+    [data-testid="stAppViewContainer"] {
+        background-color: var(--bg-primary);
+    }
+    
+    /* Sidebar styling with theme-adaptive gradient and contrast */
+    [data-testid="stSidebar"] {
+        background: var(--sidebar-gradient);
+        border-right: 1px solid var(--border-color);
         color: var(--text-primary);
     }
     
-    /* Dark mode overrides for main panel text visibility */
-    [data-testid="stAppViewContainer"] {
-        background-color: #000000;
-    }
-    
-    [data-testid="stAppViewContainer"] * {
-        color: #ffffff !important;
-    }
-    
-    [data-testid="stAppViewContainer"] .stMarkdown {
-        color: #ffffff !important;
-    }
-    
-    [data-testid="stAppViewContainer"] h1, [data-testid="stAppViewContainer"] h2, [data-testid="stAppViewContainer"] h3 {
-        color: #ffffff !important;
-    }
-    
-    [data-testid="stAppViewContainer"] .dataframe {
-        color: #ffffff !important;
-        background-color: #000000 !important;
-    }
-    
-    [data-testid="stAppViewContainer"] .dataframe thead th {
-        background-color: #111111 !important;
-        color: #ffffff !important;
-    }
-    
-    [data-testid="stAppViewContainer"] .dataframe tbody td {
-        color: #ffffff !important;
-        background-color: #000000 !important;
-    }
-    
-    /* Sidebar styling with high contrast */
-    [data-testid="stSidebar"] {
-        background: linear-gradient(180deg, #ffffff 0%, #f9f9f5 100%);
-        border-right: 1px solid #e0e0e0;
-    }
-    
-    /* Ensure ALL sidebar text is dark and readable */
+    /* Ensure sidebar elements inherit high-contrast text */
     [data-testid="stSidebar"] * {
-        color: var(--text-primary) !important;
+        color: var(--text-primary);
     }
     
     [data-testid="stSidebar"] label {
@@ -106,32 +111,28 @@ st.markdown("""
         color: var(--text-primary) !important;
     }
     
-    [data-testid="stSidebar"] input {
-        color: var(--text-primary) !important;
-        background-color: white !important;
-        border: 1px solid #d0d0d0 !important;
-    }
-    
+    [data-testid="stSidebar"] input,
     [data-testid="stSidebar"] textarea {
         color: var(--text-primary) !important;
-        background-color: white !important;
-        border: 1px solid #d0d0d0 !important;
+        background-color: var(--input-bg) !important;
+        border: 1px solid var(--border-color) !important;
+        color-scheme: light dark; /* Helps with native input contrast */
     }
     
-    /* Headers with professional styling - white for title in dark mode */
+    /* Headers with theme-adaptive color */
     h1 {
-        color: #ffffff !important;
+        color: var(--text-primary) !important;
         font-weight: 600;
         border-bottom: 2px solid var(--light-sage);
         padding-bottom: 10px;
     }
     
     h2, h3 {
-        color: #ffffff !important;
+        color: var(--text-primary) !important;
         font-weight: 500;
     }
     
-    /* Metrics with improved contrast */
+    /* Metrics with improved contrast using theme vars */
     [data-testid="stMetricValue"] {
         color: var(--dark-green) !important;
         font-weight: 600;
@@ -144,21 +145,22 @@ st.markdown("""
         font-size: 0.9rem !important;
     }
     
-    /* Professional button styling */
+    /* Professional button styling (accents consistent, text contrasts with bg) */
     .stButton > button {
         background-color: var(--forest-green);
-        color: white !important;
+        color: var(--text-primary) !important; /* Use primary text for visibility, but since bg green, white might be better - override if needed */
         border-radius: 4px;
         border: 1px solid var(--dark-green);
         padding: 0.5rem 1.2rem;
         font-weight: 500;
         transition: all 0.2s;
-        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        box-shadow: 0 2px 4px var(--shadow-color);
+        color: white !important; /* Force white text on green bg for high contrast */
     }
     
     .stButton > button:hover {
         background-color: var(--dark-green);
-        box-shadow: 0 4px 8px rgba(0,0,0,0.15);
+        box-shadow: 0 4px 8px var(--shadow-color);
         transform: translateY(-1px);
     }
     
@@ -171,13 +173,13 @@ st.markdown("""
         background-color: var(--forest-green);
     }
     
-    /* Tab styling */
+    /* Tab styling with theme-adaptive bg */
     .stTabs [data-baseweb="tab-list"] {
         gap: 4px;
-        background-color: var(--light-background);
+        background-color: var(--bg-secondary);
         padding: 4px;
         border-radius: 4px;
-        border: 1px solid #e0e0e0;
+        border: 1px solid var(--border-color);
     }
     
     .stTabs [data-baseweb="tab"] {
@@ -193,36 +195,43 @@ st.markdown("""
         color: white !important;
     }
     
-    /* Expander with better contrast */
+    /* Expander with theme-adaptive contrast */
     .streamlit-expanderHeader {
-        background-color: var(--light-background);
+        background-color: var(--bg-secondary);
         color: var(--text-primary) !important;
-        border: 1px solid #e0e0e0;
+        border: 1px solid var(--border-color);
         border-radius: 4px;
         font-weight: 500;
     }
     
     .streamlit-expanderContent {
-        background-color: white;
-        border: 1px solid #e0e0e0;
+        background-color: var(--bg-primary);
+        border: 1px solid var(--border-color);
         border-top: none;
         border-radius: 0 0 4px 4px;
         padding: 1rem;
+        color: var(--text-primary);
     }
     
-    /* Alert boxes with professional styling */
+    /* Alert boxes with theme-adaptive styling */
     .stAlert {
-        background-color: white;
-        border: 1px solid #e0e0e0;
+        background-color: var(--alert-bg);
+        border: 1px solid var(--border-color);
         border-left: 4px solid var(--forest-green);
         border-radius: 4px;
         color: var(--text-primary) !important;
     }
     
-    /* Info box specific styling */
+    /* Info box specific styling (theme-adaptive fills) */
     .stAlert[data-baseweb="notification-info"] {
         background-color: #f0f8ff;
         border-left-color: #4a90e2;
+    }
+    
+    @media (prefers-color-scheme: dark) {
+        .stAlert[data-baseweb="notification-info"] {
+            background-color: #1a1a2e;
+        }
     }
     
     /* Success box specific styling */
@@ -231,10 +240,22 @@ st.markdown("""
         border-left-color: var(--sage-green);
     }
     
+    @media (prefers-color-scheme: dark) {
+        .stAlert[data-baseweb="notification-success"] {
+            background-color: #1a2e1a;
+        }
+    }
+    
     /* Warning box specific styling */
     .stAlert[data-baseweb="notification-warning"] {
         background-color: #fffbf0;
         border-left-color: #f5a623;
+    }
+    
+    @media (prefers-color-scheme: dark) {
+        .stAlert[data-baseweb="notification-warning"] {
+            background-color: #2e2a1a;
+        }
     }
     
     /* Error box specific styling */
@@ -243,13 +264,19 @@ st.markdown("""
         border-left-color: #e74c3c;
     }
     
-    /* Input fields with professional styling */
+    @media (prefers-color-scheme: dark) {
+        .stAlert[data-baseweb="notification-error"] {
+            background-color: #2e1a1a;
+        }
+    }
+    
+    /* Input fields with theme-adaptive styling */
     .stTextInput > div > div > input,
     .stNumberInput > div > div > input,
     .stTextArea > div > div > textarea {
         color: var(--text-primary) !important;
-        background-color: white !important;
-        border: 1px solid #d0d0d0 !important;
+        background-color: var(--input-bg) !important;
+        border: 1px solid var(--border-color) !important;
         border-radius: 4px;
         padding: 8px 12px;
     }
@@ -261,7 +288,7 @@ st.markdown("""
         box-shadow: 0 0 0 2px rgba(45, 80, 22, 0.1) !important;
     }
     
-    /* Fix for number input stepper arrows (plus/minus signs) to stay red */
+    /* Fix for number input stepper arrows (plus/minus signs) - red for visibility across themes */
     [data-testid="stNumberInput"] button {
         color: #ff0000 !important;
     }
@@ -280,10 +307,10 @@ st.markdown("""
         stroke: #ff0000 !important;
     }
     
-    /* Select box styling - ensure non-editable */
+    /* Select box styling */
     .stSelectbox > div > div {
         color: var(--text-primary) !important;
-        background-color: white !important;
+        background-color: var(--input-bg) !important;
     }
     
     .stSelectbox input {
@@ -295,26 +322,28 @@ st.markdown("""
     /* Multiselect styling */
     .stMultiSelect > div > div {
         color: var(--text-primary) !important;
-        background-color: white !important;
-        border: 1px solid #d0d0d0 !important;
+        background-color: var(--input-bg) !important;
+        border: 1px solid var(--border-color) !important;
         border-radius: 4px;
     }
     
-    /* Dataframe styling */
+    /* Dataframe styling with theme-adaptive colors */
     .dataframe {
-        border: 1px solid #e0e0e0 !important;
-        background-color: white !important;
+        border: 1px solid var(--border-color) !important;
+        background-color: var(--table-bg) !important;
+        color: var(--text-primary) !important;
     }
     
     .dataframe thead th {
-        background-color: var(--light-background) !important;
+        background-color: var(--table-header-bg) !important;
         color: var(--text-primary) !important;
         font-weight: 600;
-        border-bottom: 2px solid #d0d0d0 !important;
+        border-bottom: 2px solid var(--border-color) !important;
     }
     
     .dataframe tbody td {
         color: var(--text-primary) !important;
+        background-color: var(--table-bg) !important;
     }
     
     /* Progress bar styling */
@@ -339,24 +368,24 @@ st.markdown("""
     .stImage > div > div > div > div {
         color: var(--text-secondary) !important;
         font-size: 0.85rem;
-        background-color: var(--light-background);
+        background-color: var(--bg-secondary);
         padding: 4px 8px;
         border-radius: 0 0 4px 4px;
         margin-top: -4px;
     }
     
-    /* Footer styling */
+    /* Footer styling with theme adaptation */
     .footer {
         position: fixed;
         left: 0;
         bottom: 0;
         width: 100%;
-        background-color: var(--light-background);
+        background-color: var(--bg-secondary);
         color: var(--text-secondary);
         text-align: center;
         padding: 8px;
         font-size: 0.75rem;
-        border-top: 1px solid #e0e0e0;
+        border-top: 1px solid var(--border-color);
         z-index: 999;
     }
     
@@ -378,7 +407,13 @@ st.markdown("""
         font-size: 0.8rem;
         color: var(--text-secondary);
         margin-top: 4px;
-        border: 1px solid #e0e0e0;
+        border: 1px solid var(--border-color);
+    }
+    
+    @media (prefers-color-scheme: dark) {
+        .photo-attribution {
+            background-color: rgba(0, 0, 0, 0.95);
+        }
     }
     
     .photo-attribution a {
@@ -389,9 +424,15 @@ st.markdown("""
     .photo-attribution a:hover {
         text-decoration: underline;
     }
+    
+    /* Ensure paragraphs and markdown have proper contrast */
+    p, .stMarkdown {
+        color: var(--text-primary) !important;
+        line-height: 1.6;
+    }
 </style>
 """, unsafe_allow_html=True)
-# --- END: Improved CSS ---
+# --- END: Bullet-proof CSS ---
 
 # Suppress warnings
 warnings.filterwarnings('ignore')
