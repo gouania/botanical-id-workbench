@@ -33,6 +33,50 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
+# Custom CSS for subdued botanical theme (greens and earth tones)
+st.markdown("""
+<style>
+    .stApp {
+        background-color: #f5f5f5;
+    }
+    .main .block-container {
+        background-color: #fafafa;
+        padding-top: 1rem;
+        padding-bottom: 1rem;
+        padding-left: 1rem;
+        padding-right: 1rem;
+    }
+    .stMetric > label {
+        color: #2e7d32;
+    }
+    .stMetric > div > div > div {
+        color: #388e3c;
+    }
+    .stButton > button {
+        background-color: #4caf50;
+        color: white;
+    }
+    .stButton > button:hover {
+        background-color: #45a049;
+    }
+    .stTextInput > div > div > input {
+        background-color: #e8f5e8;
+    }
+    .stSelectbox > div > div > select {
+        background-color: #e8f5e8;
+    }
+    .stSlider > div > div > div > div {
+        background-color: #81c784;
+    }
+    h1, h2, h3 {
+        color: #1b5e20;
+    }
+    .stMarkdown {
+        color: #2e7d32;
+    }
+</style>
+""", unsafe_allow_html=True)
+
 # Suppress warnings
 warnings.filterwarnings('ignore')
 logging.basicConfig(level=logging.INFO)
@@ -162,7 +206,7 @@ INAT_LICENSE_MAP = {
 
 @st.cache_data
 def get_species_images(species_name, limit=5):
-    """Fetch top iNaturalist photos for a species (default + top-voted observations)."""
+    """Fetch top iNaturalist photos for a species (default + top-voted observations). Returns photos and taxon_id."""
     try:
         # Search for taxon ID using autocomplete endpoint
         encoded_name = urllib.parse.quote(species_name)
@@ -170,11 +214,11 @@ def get_species_images(species_name, limit=5):
         response = requests.get(search_url, timeout=10)
         data = response.json()
         if not data.get('results'):
-            return []
+            return [], None
         taxon = data['results'][0]
         # Filter to ensure it's a species if possible
         if taxon.get('rank') != 'species':
-            return []
+            return [], None
         taxon_id = taxon['id']
 
         photos = []
@@ -214,10 +258,10 @@ def get_species_images(species_name, limit=5):
             if len(photos) >= limit:
                 break
 
-        return photos
+        return photos, taxon_id
     except Exception as e:
         logger.error(f"Error fetching iNat images for {species_name}: {e}")
-        return []
+        return [], None
 
 def extract_month_from_date(date_str):
     """Extract month from GBIF eventDate."""
@@ -570,6 +614,22 @@ def main():
                     import shutil
                     shutil.rmtree(cache_dir)
             st.success("Cache cleared!")
+        
+        # About section in sidebar
+        st.markdown("---")
+        st.subheader("ℹ️ About")
+        st.markdown("""
+        **Created by:** Daniel Cahen
+        
+        **Data Sources:**
+        - GBIF (Global Biodiversity Information Facility)
+        - e-Flora of South Africa (SANBI)
+        - iNaturalist
+        
+        **App License:** MIT License - Free to use, modify, and distribute.
+        
+        For issues or contributions: [GitHub Repo](https://github.com/your-repo/botanical-id-workbench) (placeholder)
+        """)
     
     # Main content area
     if st.session_state.species_data is None:
@@ -695,7 +755,7 @@ def main():
                                     with col2:
                                         # Multiple iNaturalist images if enabled
                                         with st.spinner("Fetching images..."):
-                                            images_data = get_species_images(species['name'])
+                                            images_data, taxon_id = get_species_images(species['name'])
                                             if images_data:
                                                 for img_data in images_data:
                                                     try:
@@ -705,6 +765,8 @@ def main():
                                                     except:
                                                         st.warning("Failed to load one or more images")
                                                 st.caption(f"Showing top {len(images_data)} iNaturalist photos (default + top-voted)")
+                                                if taxon_id:
+                                                    st.markdown(f"[View all photos of {species['name']} on iNaturalist](https://www.inaturalist.org/taxa/{taxon_id})")
                                             else:
                                                 st.info("No iNaturalist photos available")
                                 with col3 if include_images else col2:
@@ -858,6 +920,19 @@ def main():
             
             else:
                 st.warning("No species selected for export. Please select species in the Species List tab.")
+    
+    # Footer
+    st.markdown("---")
+    st.markdown(
+        "<p style='text-align: center; color: #666;'>"
+        "Botanical ID Workbench &copy; 2025 Daniel Cahen | "
+        "<a href='https://opensource.org/licenses/MIT' target='_blank'>MIT License</a> | "
+        "Powered by <a href='https://www.gbif.org/' target='_blank'>GBIF</a>, "
+        "<a href='http://ipt.sanbi.org.za/' target='_blank'>e-Flora SA</a>, and "
+        "<a href='https://www.inaturalist.org/' target='_blank'>iNaturalist</a>"
+        "</p>",
+        unsafe_allow_html=True
+    )
 
 if __name__ == "__main__":
     main()
