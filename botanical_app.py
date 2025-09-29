@@ -1,15 +1,3 @@
-Yes, this is a great addition! Switching to iNaturalist photos provides higher-quality, community-vetted images that align better with the "chosen" photos on taxon pages (top-voted observations for the exact taxon, which prioritize photos of that species itself before descendants). It won't affect performance much—iNaturalist's API is lightweight, and we're limiting to the top 5 photos per species (fetched via 2 quick calls: one for taxon lookup, one for observations). With Streamlit caching, it's efficient even for 10 selected species. Images load on-demand only when the "Include Images" checkbox is enabled, and we use medium-sized URLs to keep bandwidth low.
-
-I've modified the code accordingly:
-- Replaced `get_species_image` with `get_species_images` (returns a list of up to 5 photo dicts).
-- Updated the display logic in the expander to show multiple images stacked vertically in the image column (with captions).
-- Adjusted column widths slightly for better balance when images are included.
-- Added error handling and fallbacks.
-- No other changes needed—everything else (e.g., caching, exports) works as-is.
-
-Here's the full updated code:
-
-```python
 import streamlit as st
 import pandas as pd
 import pygbif.species as gbif_species
@@ -855,4 +843,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-```
