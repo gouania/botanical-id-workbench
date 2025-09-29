@@ -39,7 +39,7 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# --- Optimized CSS (theme-adaptive) ---
+# --- Optimized and Bullet-proof CSS with theme-adaptive contrast ---
 st.markdown("""
 <style>
     :root {
@@ -261,7 +261,6 @@ def format_species_name(name):
 @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=1, max=10))
 def safe_gbif_backbone(name, kingdom='Plantae'):
     """Cached GBIF backbone lookup with retry."""
-    # Fixed: Removed invalid 'verbose=False' parameter
     return gbif_species.name_backbone(name=name, kingdom=kingdom)
 
 # License mappings
@@ -350,7 +349,7 @@ def get_species_images(species_name, limit=5):
 
 @file_cache(cache_dir="gbif_cache", ttl_hours=48)
 def get_species_list_from_gbif(latitude, longitude, radius_km, taxon_name, record_limit=50000):
-    """Optimized GBIF query with bounding box (reverted from WKT for compatibility)."""
+    """Optimized GBIF query with bounding box."""
     try:
         # Backbone match
         taxon_info = safe_gbif_backbone(taxon_name)
@@ -369,7 +368,7 @@ def get_species_list_from_gbif(latitude, longitude, radius_km, taxon_name, recor
         min_lat, max_lat = latitude - lat_offset, latitude + lat_offset
         min_lon, max_lon = longitude - lon_offset, longitude + lon_offset
 
-        # Use bounding box strings (compatible with working old version)
+        # Use bounding box strings
         params = {
             'taxonKey': search_taxon_key,
             'decimalLatitude': f'{min_lat},{max_lat}',
