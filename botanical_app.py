@@ -54,6 +54,38 @@ st.markdown("""
         color: var(--text-primary);
     }
     
+    /* Dark mode overrides for main panel text visibility */
+    [data-testid="stAppViewContainer"] {
+        background-color: #000000;
+    }
+    
+    [data-testid="stAppViewContainer"] * {
+        color: #ffffff !important;
+    }
+    
+    [data-testid="stAppViewContainer"] .stMarkdown {
+        color: #ffffff !important;
+    }
+    
+    [data-testid="stAppViewContainer"] h1, [data-testid="stAppViewContainer"] h2, [data-testid="stAppViewContainer"] h3 {
+        color: #ffffff !important;
+    }
+    
+    [data-testid="stAppViewContainer"] .dataframe {
+        color: #ffffff !important;
+        background-color: #000000 !important;
+    }
+    
+    [data-testid="stAppViewContainer"] .dataframe thead th {
+        background-color: #111111 !important;
+        color: #ffffff !important;
+    }
+    
+    [data-testid="stAppViewContainer"] .dataframe tbody td {
+        color: #ffffff !important;
+        background-color: #000000 !important;
+    }
+    
     /* Sidebar styling with high contrast */
     [data-testid="stSidebar"] {
         background: linear-gradient(180deg, #ffffff 0%, #f9f9f5 100%);
@@ -86,16 +118,16 @@ st.markdown("""
         border: 1px solid #d0d0d0 !important;
     }
     
-    /* Headers with professional styling */
+    /* Headers with professional styling - white for title in dark mode */
     h1 {
-        color: var(--dark-green) !important;
+        color: #ffffff !important;
         font-weight: 600;
         border-bottom: 2px solid var(--light-sage);
         padding-bottom: 10px;
     }
     
     h2, h3 {
-        color: var(--forest-green) !important;
+        color: #ffffff !important;
         font-weight: 500;
     }
     
@@ -229,10 +261,35 @@ st.markdown("""
         box-shadow: 0 0 0 2px rgba(45, 80, 22, 0.1) !important;
     }
     
-    /* Select box styling */
+    /* Fix for number input stepper arrows (plus/minus signs) to stay red */
+    [data-testid="stNumberInput"] button {
+        color: #ff0000 !important;
+    }
+    
+    [data-testid="stNumberInput"] button:hover {
+        color: #ff0000 !important;
+    }
+    
+    [data-testid="stNumberInput"] button svg {
+        fill: #ff0000 !important;
+        stroke: #ff0000 !important;
+    }
+    
+    [data-testid="stNumberInput"] button:hover svg {
+        fill: #ff0000 !important;
+        stroke: #ff0000 !important;
+    }
+    
+    /* Select box styling - ensure non-editable */
     .stSelectbox > div > div {
         color: var(--text-primary) !important;
         background-color: white !important;
+    }
+    
+    .stSelectbox input {
+        pointer-events: none !important;
+        user-select: none !important;
+        -webkit-user-select: none !important;
     }
     
     /* Multiselect styling */
