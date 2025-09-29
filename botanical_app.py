@@ -261,7 +261,8 @@ def format_species_name(name):
 @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=1, max=10))
 def safe_gbif_backbone(name, kingdom='Plantae'):
     """Cached GBIF backbone lookup with retry."""
-    return gbif_species.name_backbone(name=name, kingdom=kingdom, verbose=False)
+    # Fixed: Removed invalid 'verbose=False' parameter
+    return gbif_species.name_backbone(name=name, kingdom=kingdom)
 
 # License mappings
 INAT_LICENSE_MAP = {
@@ -374,8 +375,8 @@ def get_species_list_from_gbif(latitude, longitude, radius_km, taxon_name, recor
         params = {
             'taxonKey': search_taxon_key,
             'geometry': wkt_polygon,
-            'hasCoordinate': True,      # Fixed: Use boolean True
-            'hasGeospatialIssue': False, # Fixed: Use boolean False
+            'hasCoordinate': True,      # Fixed: Native Python boolean
+            'hasGeospatialIssue': False, # Fixed: Native Python boolean
             'limit': 300
         }
 
