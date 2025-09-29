@@ -1130,7 +1130,7 @@ def main():
                     st.session_state.analysis_data = selected_species_data
                 
                 # Display detailed analysis if generated
-                if 'analysis_data' in st.session_state and st.session_state.analysis_data is not None:
+                if 'analysis_data' in st.session_state and st.session_state.analysis_data and len(st.session_state.analysis_data) > 0:
                     st.subheader("🔍 Detailed Species Information")
                     
                     # Pagination setup
@@ -1212,7 +1212,7 @@ def main():
             st.subheader("📄 Export Data")
             
             # Use analysis_data if available, otherwise current selection
-            if 'analysis_data' in st.session_state and st.session_state.analysis_data:
+            if 'analysis_data' in st.session_state and st.session_state.analysis_data and len(st.session_state.analysis_data) > 0:
                 selected_species_data = st.session_state.analysis_data
             else:
                 selected_species_data = [
