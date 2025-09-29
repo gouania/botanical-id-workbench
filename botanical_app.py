@@ -152,14 +152,17 @@ def safe_gbif_backbone(name, kingdom='Plantae'):
 def get_species_images(species_name, limit=5):
     """Fetch top iNaturalist photos for a species (default + top-voted observations)."""
     try:
-        # Search for taxon ID
+        # Search for taxon ID using autocomplete endpoint
         encoded_name = urllib.parse.quote(species_name)
-        search_url = f"https://api.inaturalist.org/v1/taxa/search?q={encoded_name}&rank=species&per_page=1"
+        search_url = f"https://api.inaturalist.org/v1/taxa/autocomplete?q={encoded_name}&per_page=1"
         response = requests.get(search_url, timeout=10)
         data = response.json()
         if not data.get('results'):
             return []
         taxon = data['results'][0]
+        # Filter to ensure it's a species if possible
+        if taxon.get('rank') != 'species':
+            return []
         taxon_id = taxon['id']
 
         photos = []
@@ -167,13 +170,12 @@ def get_species_images(species_name, limit=5):
         # Add default photo if available
         default_photo = taxon.get('default_photo')
         if default_photo:
-            photo_url = default_photo.get('url')  # Medium size
-            if not photo_url:
-                photo_url = default_photo.get('square_url')
-            photos.append({
-                'url': photo_url,
-                'caption': f"Default photo for {species_name}"
-            })
+            photo_url = default_photo.get('medium_url') or default_photo.get('square_url')
+            if photo_url:
+                photos.append({
+                    'url': photo_url,
+                    'caption': f"Default photo for {species_name}"
+                })
 
         # Fetch top-voted observation photos (prioritizes chosen photos for the taxon)
         obs_url = f"https://api.inaturalist.org/v1/observations?taxon_id={taxon_id}&has[]=photos&per_page={limit}&order_by=votes&order=desc"
@@ -181,9 +183,7 @@ def get_species_images(species_name, limit=5):
         obs_data = obs_response.json()
         for obs in obs_data.get('results', [])[:limit]:
             for photo in obs.get('photos', [])[:1]:  # One photo per observation
-                photo_url = photo.get('url')  # Medium size
-                if not photo_url:
-                    photo_url = photo.get('square_url')
+                photo_url = photo.get('medium_url') or photo.get('square_url')
                 if photo_url and photo_url not in [p['url'] for p in photos]:  # Avoid duplicates
                     user = photo.get('user', {})
                     license_code = photo.get('license_code', 'Unknown')
