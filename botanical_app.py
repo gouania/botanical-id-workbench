@@ -581,11 +581,21 @@ def get_species_images(species_name, limit=5):
     Fetch iNaturalist photos with proper attribution (photographer name and license).
     Returns a list of photo dictionaries with URL, photographer, and license info.
     """
+    headers = {
+        'User-Agent': 'BotanicalWorkbench/1.0 (contact: daniel.cahen.substance@gmail.com)'  # Replace with your actual contact info
+    }
+    
     try:
         # Search for taxon ID
         encoded_name = urllib.parse.quote(species_name)
         search_url = f"https://api.inaturalist.org/v1/taxa/autocomplete?q={encoded_name}&per_page=1"
-        response = requests.get(search_url, timeout=10)
+        response = requests.get(search_url, headers=headers, timeout=10)
+        
+        # Add basic error handling for debugging
+        if response.status_code != 200:
+            st.warning(f"API error for taxon search ({response.status_code}): {response.text[:200]}")
+            return [], None
+            
         data = response.json()
         
         if not data.get('results'):
@@ -627,7 +637,12 @@ def get_species_images(species_name, limit=5):
         
         # Fetch observations with photos
         obs_url = f"https://api.inaturalist.org/v1/observations?taxon_id={taxon_id}&photos=true&per_page={limit}&order_by=votes&order=desc"
-        obs_response = requests.get(obs_url, timeout=10)
+        obs_response = requests.get(obs_url, headers=headers, timeout=10)
+        
+        # Add error handling
+        if obs_response.status_code != 200:
+            st.warning(f"API error for observations ({obs_response.status_code}): {obs_response.text[:200]}")
+        
         obs_data = obs_response.json()
         
         for obs in obs_data.get('results', [])[:limit]:
@@ -1172,17 +1187,20 @@ def main():
                                                 st.markdown("**Photos from iNaturalist:**")
                                                 for img_data in images_data[:3]:  # Limit to 3 images
                                                     try:
-                                                        response = requests.get(img_data['url'], timeout=10)
+                                                        response = requests.get(img_data['url'], headers=headers, timeout=10)  # Add headers here too
+                                                        if response.status_code != 200:
+                                                            st.warning(f"Failed to load image (HTTP {response.status_code})")
+                                                            continue
                                                         img = Image.open(io.BytesIO(response.content))
                                                         
                                                         # Display image with caption
                                                         st.image(img, caption=img_data['caption'], 
-                                                               use_container_width=True)
+                                                                 use_container_width=True)
                                                         
                                                         st.markdown(" ")
                                                         
                                                     except Exception as e:
-                                                        st.warning(f"Failed to load image")
+                                                        st.warning(f"Failed to load image: {e}")
                                                 
                                                 # Link to iNaturalist
                                                 if taxon_id:
