@@ -753,7 +753,7 @@ def get_local_eflora_description(scientific_name, eflora_data):
         # Use a more robust fuzzy matching scorer that handles extra words (like author names)
         # We search against the full, original scientific name for better accuracy
         choices = df['scientificName'].dropna().tolist()
-        match = process.extractOne(name_to_check, choices, scorer=fuzz.WRatio, score_cutoff=88)
+        match = process.extractOne(name_to_check, choices, scorer=fuzz.WRatio, score_cutoff=85)
         
         if match:
             # If we get a good match, find the corresponding clean name (index) to retrieve the full record
@@ -763,7 +763,7 @@ def get_local_eflora_description(scientific_name, eflora_data):
         return None
 
     # --- Helper function to extract and format data ---
-    def extract_and_format(matched_clean_name, original_search_name=None):
+    def extract_and_format(matched_clean_name, original_search_name=None, is_synonym=False):
         try:
             row = eflora_data.loc[matched_clean_name]
             descriptions = row['descriptions']
@@ -780,7 +780,8 @@ def get_local_eflora_description(scientific_name, eflora_data):
 
             # Build description text, indicating if a synonym was used
             if original_search_name and original_search_name != full_scientific_name:
-                name_display = f"**Scientific Name:** {full_scientific_name} (Searched as: *{original_search_name}*)"
+                synonym_note = " - Synonym" if is_synonym else ""
+                name_display = f"**Scientific Name:** {full_scientific_name} (Searched as: *{original_search_name}*{synonym_note})"
             else:
                 name_display = f"**Scientific Name:** {full_scientific_name}"
             
@@ -817,31 +818,30 @@ def get_local_eflora_description(scientific_name, eflora_data):
             return None
 
     # --- Main Logic ---
-    # 1. Try to find a match for the original name
+    # 1. Try GBIF backbone to get canonical name and handle synonyms
+    try:
+        backbone_info = safe_gbif_backbone(scientific_name)
+        if backbone_info and backbone_info.get('matchType') != 'NONE':
+            is_synonym = backbone_info.get('synonym', False)
+            search_name = backbone_info.get('acceptedScientificName') if is_synonym else backbone_info.get('scientificName', scientific_name)
+            original_search_name = scientific_name if is_synonym else None
+            
+            matched_index = find_best_match(search_name, eflora_data)
+            if matched_index:
+                result = extract_and_format(matched_index, original_search_name=original_search_name, is_synonym=is_synonym)
+                if result:
+                    return True, result
+    except Exception as e:
+        logger.error(f"GBIF backbone lookup failed for {scientific_name}: {e}")
+
+    # 2. Fallback: direct fuzzy match on original name
     matched_index = find_best_match(scientific_name, eflora_data)
     if matched_index:
         result = extract_and_format(matched_index)
         if result:
             return True, result
 
-    # 2. If it fails, try to find a match for the synonym (accepted name)
-    try:
-        backbone_info = safe_gbif_backbone(scientific_name)
-        is_synonym = backbone_info.get('synonym', False)
-        accepted_name_str = backbone_info.get('acceptedScientificName')
-
-        if is_synonym and accepted_name_str:
-            # st.info(f"'{scientific_name}' is a synonym. Trying accepted name: '{accepted_name_str}'...")
-            matched_index_from_synonym = find_best_match(accepted_name_str, eflora_data)
-            
-            if matched_index_from_synonym:
-                result = extract_and_format(matched_index_from_synonym, original_search_name=scientific_name)
-                if result:
-                    return True, result
-    except Exception as e:
-        logger.error(f"GBIF backbone lookup failed for {scientific_name}: {e}")
-
-    # 4. If all lookups fail
+    # 3. If all lookups fail
     return False, f"No description available for {scientific_name} or its accepted synonym."
 
 
@@ -1069,7 +1069,7 @@ def main():
             df = df[df['name'].str.strip() != '']
             df_display = df[['name', 'family', 'count']].copy()
             df_display.columns = ['Species', 'Family', 'Records']
-            st.dataframe(df_display, use_container_width=True, height=300)
+            st.dataframe(df_display, use_container_width=True, height=300, hide_index=True)
             
             # Selection controls
             st.subheader("Select Species for Detailed Analysis")
@@ -1225,7 +1225,7 @@ def main():
                     )
                     
                     with st.expander("Preview JSON"):
-                        st.json(export_data)
+                        st.code(json_str, language='json')
                 
                 else:
                     # Markdown export
@@ -1269,7 +1269,7 @@ def main():
                     )
                     
                     with st.expander("Preview Markdown"):
-                        st.markdown(markdown_str)
+                        st.code(markdown_str, language='markdown')
             else:
                 st.warning("Please select species in the Species List tab first")
 
