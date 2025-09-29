@@ -988,8 +988,12 @@ def main():
         st.subheader("⚙️ Options")
         include_images = st.checkbox("Include Images", value=True,
                                      help="Fetch images from iNaturalist (slower but more informative)")
-        export_format = st.selectbox("Export Format", ["Markdown", "JSON"],
-                                     help="Format for downloading results")
+        export_format = st.radio(
+            "Export Format", 
+            ["JSON", "Markdown"], # Set JSON as the default (first in list)
+            horizontal=True,
+            help="Format for downloading results (JSON is best for LLM analysis)"
+        )
         
         # Actions
         if st.button("🔍 Search GBIF", type="primary", use_container_width=True):
