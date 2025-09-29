@@ -7,6 +7,7 @@ import time
 import os
 import requests 
 import zipfile   
+from typing import Optional
 import json
 import requests
 from datetime import datetime
