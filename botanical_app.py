@@ -561,6 +561,8 @@ INAT_LICENSE_MAP = {
     'pd': 'Public Domain'
 }
 
+ALLOWED_INAT_LICENSES = ['cc-by', 'cc-by-sa', 'cc0', 'pd']
+
 @st.cache_data
 def get_species_images(species_name, limit=5):
     """
@@ -602,14 +604,14 @@ def get_species_images(species_name, limit=5):
                     photographer = 'Unknown photographer'
                 
                 license_code = default_photo.get('license_code', '')
-                license_name = INAT_LICENSE_MAP.get(license_code, 'All rights reserved')
-                
-                photos.append({
-                    'url': photo_url,
-                    'photographer': photographer,
-                    'license': license_name,
-                    'caption': f"© {photographer} · {license_name}"
-                })
+                if license_code in ALLOWED_INAT_LICENSES:
+                    license_name = INAT_LICENSE_MAP.get(license_code, 'Unknown')
+                    photos.append({
+                        'url': photo_url,
+                        'photographer': photographer,
+                        'license': license_name,
+                        'caption': f"© {photographer} · {license_name}"
+                    })
         
         # Fetch observations with photos
         obs_url = f"https://api.inaturalist.org/v1/observations?taxon_id={taxon_id}&photos=true&per_page={limit}&order_by=votes&order=desc"
@@ -635,14 +637,15 @@ def get_species_images(species_name, limit=5):
                         photo_photographer = photographer_name
                     
                     license_code = photo.get('license_code', '')
-                    license_name = INAT_LICENSE_MAP.get(license_code, 'All rights reserved')
-                    
-                    photos.append({
-                        'url': photo_url,
-                        'photographer': photo_photographer,
-                        'license': license_name,
-                        'caption': f"© {photo_photographer} · {license_name}"
-                    })
+                    if license_code in ALLOWED_INAT_LICENSES:
+                        license_name = INAT_LICENSE_MAP.get(license_code, 'Unknown')
+                        
+                        photos.append({
+                            'url': photo_url,
+                            'photographer': photo_photographer,
+                            'license': license_name,
+                            'caption': f"© {photo_photographer} · {license_name}"
+                        })
                 
                 if len(photos) >= limit:
                     break
@@ -655,28 +658,6 @@ def get_species_images(species_name, limit=5):
     except Exception as e:
         logger.error(f"Error fetching iNat images for {species_name}: {e}")
         return [], None
-
-def extract_month_from_date(date_str):
-    """Extract month from GBIF eventDate."""
-    if not date_str:
-        return None
-    try:
-        if '-' in date_str:
-            return int(date_str.split('-')[1])
-        elif '/' in date_str:
-            return int(date_str.split('/')[0])
-        else:
-            return None
-    except:
-        return None
-
-def calculate_phenology(records):
-    """Aggregate phenology from records."""
-    months = [extract_month_from_date(r.get('eventDate')) for r in records if extract_month_from_date(r.get('eventDate'))]
-    if not months:
-        return {m: 0 for m in range(1, 13)}
-    month_counts = {m: months.count(m) for m in range(1, 13)}
-    return month_counts
 
 @file_cache(cache_dir="gbif_cache")
 def get_species_list_from_gbif(latitude, longitude, radius_km, taxon_name, record_limit=50000):
@@ -746,14 +727,10 @@ def get_species_list_from_gbif(latitude, longitude, radius_km, taxon_name, recor
                 if species_name not in species_dict:
                     species_dict[species_name] = {
                         'name': species_name, 'count': 0, 'family': record.get('family', 'Unknown'),
-                        'taxon_key': species_key, 'status_flag': status_flag, 'phenology': {}, 'records': []
+                        'taxon_key': species_key, 'status_flag': status_flag, 'records': []
                     }
                 species_dict[species_name]['count'] += 1
                 species_dict[species_name]['records'].append(record)
-        
-        # Compute phenology per species
-        for sp in species_dict.values():
-            sp['phenology'] = calculate_phenology(sp['records'])
         
         species_list = sorted(species_dict.values(), key=lambda x: x['count'], reverse=True)
         return species_list, all_records
@@ -854,46 +831,6 @@ def get_local_eflora_description(scientific_name, eflora_data):
     except Exception as e:
         st.error(f"Error processing {clean_name}: {e}")
         return False, f"Error retrieving data for {clean_name}"
-
-def create_phenology_chart(phenology_data, species_name):
-    """Create a professional chart using Plotly."""
-    months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
-              'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
-    counts = [phenology_data.get(i, 0) for i in range(1, 13)]
-    
-    fig = go.Figure(data=go.Bar(
-        x=months, 
-        y=counts,
-        marker=dict(
-            color='#5a7c3d',
-            line=dict(color='#2d5016', width=1.5)
-        ),
-        text=counts,
-        textposition='outside'
-    ))
-    
-    fig.update_layout(
-        title=dict(
-            text=f"Observations by Month: {species_name}",
-            font=dict(size=14, color='#1a3d07')
-        ),
-        xaxis_title="Month",
-        yaxis_title="Observation Count",
-        height=400,
-        plot_bgcolor='#fafafa',
-        paper_bgcolor='white',
-        font=dict(color='#1a1a1a'),
-        xaxis=dict(
-            gridcolor='#e0e0e0',
-            tickfont=dict(color='#1a1a1a')
-        ),
-        yaxis=dict(
-            gridcolor='#e0e0e0',
-            tickfont=dict(color='#1a1a1a')
-        )
-    )
-    
-    return fig
 
 def create_species_map(records, species_list, center_lat, center_lon):
     """Create an interactive map with species observations."""
@@ -1170,9 +1107,9 @@ def main():
                         for species in selected_species_data[:10]:
                             with st.expander(f"📋 {species['name']} - {species['family']} ({species['count']} records)", expanded=True):
                                 if include_images:
-                                    col1, col2, col3 = st.columns([2, 1, 1])
-                                else:
                                     col1, col2 = st.columns([3, 1])
+                                else:
+                                    col1 = st.columns([1])[0]
                                 
                                 with col1:
                                     # Get description
@@ -1213,6 +1150,8 @@ def main():
                                                         </div>
                                                         """, unsafe_allow_html=True)
                                                         
+                                                        st.markdown(" ")
+                                                        
                                                     except Exception as e:
                                                         st.warning(f"Failed to load image")
                                                 
@@ -1222,12 +1161,6 @@ def main():
                                                     st.markdown(f"[View on iNaturalist ↗]({inat_link})")
                                             else:
                                                 st.info("No photos available")
-                                
-                                with col3 if include_images else col2:
-                                    # Phenology chart
-                                    if species.get('phenology'):
-                                        fig = create_phenology_chart(species['phenology'], species['name'])
-                                        st.plotly_chart(fig, use_container_width=True)
         
         with tab2:
             st.subheader("🗺️ Species Distribution Map")
@@ -1318,8 +1251,7 @@ def main():
                             "name": species['name'],
                             "family": species['family'],
                             "gbif_count": species['count'],
-                            "description": description if success else "No description available",
-                            "phenology": species.get('phenology', {})
+                            "description": description if success else "No description available"
                         })
                     
                     json_str = json.dumps(export_data, indent=2)
