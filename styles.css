@@ -50,10 +50,13 @@
 }
 
 /* --- GLOBAL STYLING --- */
-.stApp, p, .stMarkdown {
-    color: var(--text-primary) !important;
+.stApp {
     background-color: var(--bg-primary);
     font-family: 'Arial', sans-serif;
+}
+
+p, .stMarkdown {
+    color: var(--text-primary) !important;
     line-height: 1.6;
 }
 
