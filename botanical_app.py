@@ -162,7 +162,12 @@ def get_species_image(species_name, limit=1):
         if response and 'results' in response and response['results']:
             media = response['results'][0].get('media', [])
             if media:
-                return media[0].get('identifier')
+                img = media[0]
+                return {
+                    'url': img.get('identifier'),
+                    'creator': img.get('creator', 'Unknown'),
+                    'license': img.get('license', 'Unknown')
+                }
         return None
     except:
         return None
@@ -351,6 +356,14 @@ def get_local_eflora_description(scientific_name, eflora_data):
         
         if sections_added == 0:
             return False, f"No detailed descriptions available for {clean_name}"
+
+        # Add e-Flora citation
+        extracted_data.append(
+            "\n**Citation:** e-Flora of South Africa. v1.42. 2023. South African National Biodiversity Institute. http://ipt.sanbi.org.za/iptsanbi/resource?r=flora_descriptions&v=1.42"
+        )
+        extracted_data.append(
+            "**License:** CC-BY 4.0"
+        )
             
         return True, "\n\n".join(extracted_data)
         
@@ -635,12 +648,13 @@ def main():
                                     with col2:
                                         # Image if enabled
                                         with st.spinner("Fetching image..."):
-                                            image_url = get_species_image(species['name'])
-                                            if image_url:
+                                            image_data = get_species_image(species['name'])
+                                            if image_data:
                                                 try:
-                                                    response = requests.get(image_url, timeout=10)
+                                                    response = requests.get(image_data['url'], timeout=10)
                                                     img = Image.open(io.BytesIO(response.content))
-                                                    st.image(img, caption=f"Image of {species['name']}", use_container_width=True)
+                                                    caption = f"Image of {species['name']} | Photographer: {image_data['creator']} | License: {image_data['license']}"
+                                                    st.image(img, caption=caption, use_container_width=True)
                                                 except:
                                                     st.warning("Failed to load image")
                                             else:
