@@ -5,8 +5,7 @@
 
 An advanced web application for botanical species identification in South Africa, leveraging GBIF, iNaturalist, and the official e-Flora database from the South African National Biodiversity Institute (SANBI).
 
-![App Screenshot](path/to/your/screenshot.png)
-*(Replace `path/to/your/screenshot.png` with an actual screenshot of your app!)*
+![App Screenshot](assets/app_preview.png)
 
 ## About The Project
 
