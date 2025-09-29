@@ -1,3 +1,8 @@
+This is a great request. I will implement the creator acknowledgment, improve the contrast based on common issues in the provided CSS, and enhance the iNaturalist image display with attribution and links.
+
+Here is the improved code:
+
+```python
 import streamlit as st
 import pandas as pd
 import pygbif.species as gbif_species
@@ -33,7 +38,7 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# Custom CSS for botanical color scheme
+# --- START: Custom CSS for botanical color scheme and contrast improvement ---
 st.markdown("""
 <style>
     /* Main color scheme - Forest green and earth tones */
@@ -61,8 +66,9 @@ st.markdown("""
         font-weight: 600;
     }
     
+    /* IMPROVEMENT 1: Change Metric Label color from Earth Brown to Forest Green for better contrast */
     [data-testid="stMetricLabel"] {
-        color: #6b5b4a !important;
+        color: #2d5016 !important; /* Changed from #6b5b4a */
     }
     
     /* Buttons */
@@ -97,9 +103,10 @@ st.markdown("""
         border-radius: 8px;
     }
     
+    /* IMPROVEMENT 2: Change unselected tab text color from Earth Brown to Forest Green for better contrast */
     .stTabs [data-baseweb="tab"] {
         background-color: transparent;
-        color: #6b5b4a;
+        color: #2d5016; /* Changed from #6b5b4a */
         border-radius: 6px;
         padding: 8px 16px;
     }
@@ -151,8 +158,31 @@ st.markdown("""
         border-color: #8b9d77;
         border-radius: 6px;
     }
+    
+    /* Footer for Copyright/Creator Acknowledgment */
+    .footer {
+        position: fixed;
+        left: 0;
+        bottom: 0;
+        width: 100%;
+        background-color: var(--light-moss); 
+        color: var(--earth-brown);
+        text-align: center;
+        padding: 5px;
+        font-size: 10px;
+        border-top: 1px solid var(--sage-green);
+        z-index: 1000; 
+    }
+    .footer a {
+        color: var(--forest-green);
+        text-decoration: none;
+    }
+    .footer a:hover {
+        text-decoration: underline;
+    }
 </style>
 """, unsafe_allow_html=True)
+# --- END: Custom CSS ---
 
 # Suppress warnings
 warnings.filterwarnings('ignore')
@@ -283,7 +313,10 @@ INAT_LICENSE_MAP = {
 
 @st.cache_data
 def get_species_images(species_name, limit=5):
-    """Fetch top iNaturalist photos for a species (default + top-voted observations)."""
+    """
+    Fetch top iNaturalist photos for a species (default + top-voted observations).
+    Returns a list of photos and the iNaturalist taxon ID.
+    """
     try:
         # Search for taxon ID using autocomplete endpoint
         encoded_name = urllib.parse.quote(species_name)
@@ -291,11 +324,11 @@ def get_species_images(species_name, limit=5):
         response = requests.get(search_url, timeout=10)
         data = response.json()
         if not data.get('results'):
-            return []
+            return [], None
         taxon = data['results'][0]
         # Filter to ensure it's a species if possible
         if taxon.get('rank') != 'species':
-            return []
+            return [], None
         taxon_id = taxon['id']
 
         photos = []
@@ -305,9 +338,13 @@ def get_species_images(species_name, limit=5):
         if default_photo:
             photo_url = default_photo.get('medium_url') or default_photo.get('square_url')
             if photo_url:
+                # Use the taxon's attribution field for the default photo
+                attribution_text = taxon.get('attribution', 'Unknown')
+                # IMPROVEMENT 3: Include attribution for default photo
+                caption = f"Default photo | Attribution: {attribution_text}"
                 photos.append({
                     'url': photo_url,
-                    'caption': f"Default photo for {species_name}"
+                    'caption': caption
                 })
 
         # Fetch top-voted observation photos (prioritizes chosen photos for the taxon)
@@ -321,11 +358,13 @@ def get_species_images(species_name, limit=5):
                     user = photo.get('user', {})
                     license_code = photo.get('license_code')
                     license_name = INAT_LICENSE_MAP.get(license_code, 'Unknown')
-                    # Only include attribution if license requires it (all CC licenses do, but skip if unknown)
+                    
+                    # IMPROVEMENT 3: Ensure photographer and license are in caption
                     if license_name != 'Unknown':
                         caption = f"Photo by {user.get('login', 'Unknown')} | License: {license_name}"
                     else:
                         caption = f"Photo by {user.get('login', 'Unknown')}"
+                        
                     photos.append({
                         'url': photo_url,
                         'caption': caption
@@ -335,10 +374,10 @@ def get_species_images(species_name, limit=5):
             if len(photos) >= limit:
                 break
 
-        return photos
+        return photos, taxon_id
     except Exception as e:
         logger.error(f"Error fetching iNat images for {species_name}: {e}")
-        return []
+        return [], None
 
 def extract_month_from_date(date_str):
     """Extract month from GBIF eventDate."""
@@ -650,6 +689,17 @@ def create_species_map(records, species_list, center_lat, center_lon):
     
     return m
 
+# --- START: Creator Acknowledgment Function ---
+def add_footer():
+    """Adds a fixed footer with creator and copyright information."""
+    st.markdown(f"""
+    <div class="footer">
+        Created by **Daniel Cahen** | Copyright © {datetime.now().year} | Licensed under the MIT License
+    </div>
+    """, unsafe_allow_html=True)
+# --- END: Creator Acknowledgment Function ---
+
+
 # Main Streamlit App
 def main():
     st.title("🌿 Botanical Identification Workbench")
@@ -864,16 +914,23 @@ def main():
                                     with col2:
                                         # Multiple iNaturalist images if enabled
                                         with st.spinner("Fetching images..."):
-                                            images_data = get_species_images(species['name'])
+                                            # IMPROVEMENT 4: Get taxon_id for link
+                                            images_data, taxon_id = get_species_images(species['name'])
                                             if images_data:
                                                 for img_data in images_data:
                                                     try:
                                                         response = requests.get(img_data['url'], timeout=10)
                                                         img = Image.open(io.BytesIO(response.content))
+                                                        # IMPROVEMENT 3: Caption already includes photographer and license
                                                         st.image(img, caption=img_data['caption'], use_container_width=True)
                                                     except:
                                                         st.warning("Failed to load one or more images")
                                                 st.caption(f"Showing top {len(images_data)} iNaturalist photos (default + top-voted)")
+                                                
+                                                # IMPROVEMENT 4: Provide link to all iNaturalist images
+                                                if taxon_id:
+                                                    inat_link = f"https://www.inaturalist.org/taxa/{taxon_id}/browse_photos"
+                                                    st.markdown(f"[View all iNaturalist images for {species['name']} ↗]({inat_link})")
                                             else:
                                                 st.info("No iNaturalist photos available")
                                 with col3 if include_images else col2:
@@ -1033,6 +1090,9 @@ def main():
             
             else:
                 st.warning("No species selected for export. Please select species in the Species List tab.")
+
+    # IMPROVEMENT 1: Add the footer for creator acknowledgment and copyright
+    add_footer()
 
 if __name__ == "__main__":
     main()
