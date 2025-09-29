@@ -33,175 +33,308 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# --- START: Custom CSS for botanical color scheme and contrast improvement ---
+# --- START: Improved CSS with better contrast and professional styling ---
 st.markdown("""
 <style>
-    /* Main color scheme - Forest green and earth tones */
+    /* Main color scheme - Professional earth tones with high contrast */
     :root {
+        --dark-green: #1a3d07;
         --forest-green: #2d5016;
-        --sage-green: #8b9d77;
-        --earth-brown: #6b5b4a;
-        --light-moss: #e8f0e3;
-        --cream: #f5f5dc;
+        --sage-green: #5a7c3d;
+        --light-sage: #a4b494;
+        --earth-brown: #4a3c28;
+        --light-background: #f9f9f5;
+        --cream: #fffef9;
+        --text-primary: #1a1a1a;
+        --text-secondary: #4a4a4a;
     }
     
-    /* Sidebar styling (Sets the light background) */
+    /* Global text color to ensure readability */
+    .stApp {
+        color: var(--text-primary);
+    }
+    
+    /* Sidebar styling with high contrast */
     [data-testid="stSidebar"] {
-        background: linear-gradient(180deg, #e8f0e3 0%, #f5f5dc 100%);
-    }
-
-    /* IMPROVEMENT 1: Fix low contrast for ALL sidebar text/labels in Light Mode.
-       Force all relevant text elements inside the sidebar to use the dark forest green color. */
-    [data-testid="stSidebar"] label, 
-    [data-testid="stSidebar"] .st-emotion-cache-16idsys, /* Common Streamlit text element for labels */
-    [data-testid="stSidebar"] .st-emotion-cache-10trblm, /* Another common Streamlit text element */
-    [data-testid="stSidebar"] .st-emotion-cache-1f1g6o9, /* Targets generic text/labels like "Taxon Name" */
-    [data-testid="stSidebar"] .st-emotion-cache-1v0mbdj, /* Targets checkbox label text */
-    [data-testid="stSidebar"] .st-emotion-cache-1v0mbdj p, /* Targets text inside checkbox label */
-    [data-testid="stSidebar"] .st-emotion-cache-1g0q2nr, /* Targets slider min/max value labels (1, 200) */
-    [data-testid="stSidebar"] .st-emotion-cache-1g0q2nr p,
-    [data-testid="stSidebar"] .streamlit-expanderHeader { /* Targets expander header text */
-        color: var(--forest-green) !important; /* Forces dark color against light background */
+        background: linear-gradient(180deg, #ffffff 0%, #f9f9f5 100%);
+        border-right: 1px solid #e0e0e0;
     }
     
-    /* Additional broad targeting for sidebar text elements to catch any missed ones */
-    [data-testid="stSidebar"] span,
-    [data-testid="stSidebar"] div[class*="st-emotion-cache"],
-    [data-testid="stSidebar"] p {
-        color: var(--forest-green) !important;
+    /* Ensure ALL sidebar text is dark and readable */
+    [data-testid="stSidebar"] * {
+        color: var(--text-primary) !important;
     }
     
-    /* Ensure expander content text is dark */
-    [data-testid="stSidebar"] .streamlit-expanderContent {
-        color: var(--forest-green) !important;
+    [data-testid="stSidebar"] label {
+        color: var(--text-primary) !important;
+        font-weight: 500;
     }
     
-    /* Headers */
-    h1, h2, h3 {
-        color: #2d5016 !important;
+    [data-testid="stSidebar"] .stMarkdown {
+        color: var(--text-primary) !important;
     }
     
-    /* Metrics */
-    [data-testid="stMetricValue"] {
-        color: #2d5016 !important;
+    [data-testid="stSidebar"] input {
+        color: var(--text-primary) !important;
+        background-color: white !important;
+        border: 1px solid #d0d0d0 !important;
+    }
+    
+    [data-testid="stSidebar"] textarea {
+        color: var(--text-primary) !important;
+        background-color: white !important;
+        border: 1px solid #d0d0d0 !important;
+    }
+    
+    /* Headers with professional styling */
+    h1 {
+        color: var(--dark-green) !important;
         font-weight: 600;
+        border-bottom: 2px solid var(--light-sage);
+        padding-bottom: 10px;
+    }
+    
+    h2, h3 {
+        color: var(--forest-green) !important;
+        font-weight: 500;
+    }
+    
+    /* Metrics with improved contrast */
+    [data-testid="stMetricValue"] {
+        color: var(--dark-green) !important;
+        font-weight: 600;
+        font-size: 1.8rem !important;
     }
     
     [data-testid="stMetricLabel"] {
-        color: #6b5b4a !important;
-    }
-    
-    /* Buttons */
-    .stButton>button {
-        background-color: #2d5016;
-        color: white;
-        border-radius: 8px;
-        border: none;
-        padding: 0.5rem 1rem;
+        color: var(--text-secondary) !important;
         font-weight: 500;
-        transition: all 0.3s;
+        font-size: 0.9rem !important;
     }
     
-    .stButton>button:hover {
-        background-color: #3d6b22;
-        box-shadow: 0 4px 8px rgba(45, 80, 22, 0.3);
+    /* Professional button styling */
+    .stButton > button {
+        background-color: var(--forest-green);
+        color: white !important;
+        border-radius: 4px;
+        border: 1px solid var(--dark-green);
+        padding: 0.5rem 1.2rem;
+        font-weight: 500;
+        transition: all 0.2s;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
     }
     
-    .stButton>button[kind="primary"] {
-        background-color: #4a7c24;
+    .stButton > button:hover {
+        background-color: var(--dark-green);
+        box-shadow: 0 4px 8px rgba(0,0,0,0.15);
+        transform: translateY(-1px);
     }
     
-    .stButton>button[kind="primary"]:hover {
-        background-color: #5a9030;
+    .stButton > button[kind="primary"] {
+        background-color: var(--sage-green);
+        border-color: var(--forest-green);
     }
     
-    /* Tabs */
+    .stButton > button[kind="primary"]:hover {
+        background-color: var(--forest-green);
+    }
+    
+    /* Tab styling */
     .stTabs [data-baseweb="tab-list"] {
-        gap: 8px;
-        background-color: #f5f5dc;
-        padding: 8px;
-        border-radius: 8px;
+        gap: 4px;
+        background-color: var(--light-background);
+        padding: 4px;
+        border-radius: 4px;
+        border: 1px solid #e0e0e0;
     }
     
     .stTabs [data-baseweb="tab"] {
+        color: var(--text-secondary) !important;
         background-color: transparent;
-        color: #6b5b4a;
-        border-radius: 6px;
+        border-radius: 3px;
         padding: 8px 16px;
-    }
-    
-    .stTabs [aria-selected="true"] {
-        background-color: #2d5016 !important;
-        color: white !important;
-    }
-    
-    /* Expander */
-    /* Note: The header text color is already fixed in IMPROVEMENT 1, this keeps the background/border styling */
-    .streamlit-expanderHeader {
-        background-color: #e8f0e3;
-        border-radius: 6px;
         font-weight: 500;
     }
     
-    /* Info boxes */
+    .stTabs [aria-selected="true"] {
+        background-color: var(--forest-green) !important;
+        color: white !important;
+    }
+    
+    /* Expander with better contrast */
+    .streamlit-expanderHeader {
+        background-color: var(--light-background);
+        color: var(--text-primary) !important;
+        border: 1px solid #e0e0e0;
+        border-radius: 4px;
+        font-weight: 500;
+    }
+    
+    .streamlit-expanderContent {
+        background-color: white;
+        border: 1px solid #e0e0e0;
+        border-top: none;
+        border-radius: 0 0 4px 4px;
+        padding: 1rem;
+    }
+    
+    /* Alert boxes with professional styling */
     .stAlert {
-        border-radius: 8px;
+        background-color: white;
+        border: 1px solid #e0e0e0;
+        border-left: 4px solid var(--forest-green);
+        border-radius: 4px;
+        color: var(--text-primary) !important;
     }
     
-    div[data-baseweb="notification"] {
-        border-left: 4px solid #2d5016;
+    /* Info box specific styling */
+    .stAlert[data-baseweb="notification-info"] {
+        background-color: #f0f8ff;
+        border-left-color: #4a90e2;
     }
     
-    /* Dataframe */
+    /* Success box specific styling */
+    .stAlert[data-baseweb="notification-success"] {
+        background-color: #f0fff4;
+        border-left-color: var(--sage-green);
+    }
+    
+    /* Warning box specific styling */
+    .stAlert[data-baseweb="notification-warning"] {
+        background-color: #fffbf0;
+        border-left-color: #f5a623;
+    }
+    
+    /* Error box specific styling */
+    .stAlert[data-baseweb="notification-error"] {
+        background-color: #fff5f5;
+        border-left-color: #e74c3c;
+    }
+    
+    /* Input fields with professional styling */
+    .stTextInput > div > div > input,
+    .stNumberInput > div > div > input,
+    .stTextArea > div > div > textarea {
+        color: var(--text-primary) !important;
+        background-color: white !important;
+        border: 1px solid #d0d0d0 !important;
+        border-radius: 4px;
+        padding: 8px 12px;
+    }
+    
+    .stTextInput > div > div > input:focus,
+    .stNumberInput > div > div > input:focus,
+    .stTextArea > div > div > textarea:focus {
+        border-color: var(--forest-green) !important;
+        box-shadow: 0 0 0 2px rgba(45, 80, 22, 0.1) !important;
+    }
+    
+    /* Select box styling */
+    .stSelectbox > div > div {
+        color: var(--text-primary) !important;
+        background-color: white !important;
+    }
+    
+    /* Multiselect styling */
+    .stMultiSelect > div > div {
+        color: var(--text-primary) !important;
+        background-color: white !important;
+        border: 1px solid #d0d0d0 !important;
+        border-radius: 4px;
+    }
+    
+    /* Dataframe styling */
     .dataframe {
-        border: 1px solid #8b9d77 !important;
+        border: 1px solid #e0e0e0 !important;
+        background-color: white !important;
     }
     
-    /* Input fields */
-    .stTextInput>div>div>input,
-    .stNumberInput>div>div>input,
-    .stTextArea>div>div>textarea {
-        border-color: #8b9d77;
-        border-radius: 6px;
+    .dataframe thead th {
+        background-color: var(--light-background) !important;
+        color: var(--text-primary) !important;
+        font-weight: 600;
+        border-bottom: 2px solid #d0d0d0 !important;
     }
     
-    .stTextInput>div>div>input:focus,
-    .stNumberInput>div>div>input:focus,
-    .stTextArea>div>div>textarea:focus {
-        border-color: #2d5016;
-        box-shadow: 0 0 0 1px #2d5016;
+    .dataframe tbody td {
+        color: var(--text-primary) !important;
     }
     
-    /* Multiselect */
-    .stMultiSelect>div>div {
-        border-color: #8b9d77;
-        border-radius: 6px;
+    /* Progress bar styling */
+    .stProgress > div > div > div {
+        background-color: var(--sage-green) !important;
     }
     
-    /* Footer for Copyright/Creator Acknowledgment */
+    /* Slider styling */
+    .stSlider > div > div > div {
+        color: var(--text-primary) !important;
+    }
+    
+    .stSlider [data-baseweb="slider-track"] {
+        background-color: var(--light-sage) !important;
+    }
+    
+    .stSlider [data-baseweb="slider-track-filled"] {
+        background-color: var(--forest-green) !important;
+    }
+    
+    /* Image caption styling for attribution */
+    .stImage > div > div > div > div {
+        color: var(--text-secondary) !important;
+        font-size: 0.85rem;
+        background-color: var(--light-background);
+        padding: 4px 8px;
+        border-radius: 0 0 4px 4px;
+        margin-top: -4px;
+    }
+    
+    /* Footer styling */
     .footer {
         position: fixed;
         left: 0;
         bottom: 0;
         width: 100%;
-        background-color: var(--light-moss); 
-        color: var(--earth-brown);
+        background-color: var(--light-background);
+        color: var(--text-secondary);
         text-align: center;
-        padding: 5px;
-        font-size: 10px;
-        border-top: 1px solid var(--sage-green);
-        z-index: 1000; 
+        padding: 8px;
+        font-size: 0.75rem;
+        border-top: 1px solid #e0e0e0;
+        z-index: 999;
     }
+    
     .footer a {
         color: var(--forest-green);
         text-decoration: none;
+        font-weight: 500;
     }
+    
     .footer a:hover {
+        text-decoration: underline;
+    }
+    
+    /* Custom class for photo attribution */
+    .photo-attribution {
+        background-color: rgba(255, 255, 255, 0.95);
+        padding: 6px 10px;
+        border-radius: 4px;
+        font-size: 0.8rem;
+        color: var(--text-secondary);
+        margin-top: 4px;
+        border: 1px solid #e0e0e0;
+    }
+    
+    .photo-attribution a {
+        color: var(--forest-green);
+        text-decoration: none;
+    }
+    
+    .photo-attribution a:hover {
         text-decoration: underline;
     }
 </style>
 """, unsafe_allow_html=True)
-# --- END: Custom CSS ---
+# --- END: Improved CSS ---
 
 # Suppress warnings
 warnings.filterwarnings('ignore')
@@ -318,86 +451,109 @@ def format_species_name(name):
 def safe_gbif_backbone(name, kingdom='Plantae'):
     return gbif_species.name_backbone(name=name, kingdom=kingdom, verbose=False)
 
-# iNaturalist license code mapping
+# iNaturalist license codes and their meanings
 INAT_LICENSE_MAP = {
-    1: 'CC BY',
-    2: 'CC BY-SA',
-    3: 'CC BY-ND',
-    4: 'CC BY-NC',
-    5: 'CC BY-NC-ND',
-    6: 'CC BY-NC-SA',
-    7: 'CC BY-SA (iNaturalist)',
-    None: 'Unknown'
+    'cc-by': 'CC BY 4.0',
+    'cc-by-sa': 'CC BY-SA 4.0',
+    'cc-by-nd': 'CC BY-ND 4.0',
+    'cc-by-nc': 'CC BY-NC 4.0',
+    'cc-by-nc-nd': 'CC BY-NC-ND 4.0',
+    'cc-by-nc-sa': 'CC BY-NC-SA 4.0',
+    'cc0': 'CC0 1.0',
+    'pd': 'Public Domain'
 }
 
 @st.cache_data
 def get_species_images(species_name, limit=5):
     """
-    Fetch top iNaturalist photos for a species (default + top-voted observations).
-    Returns a list of photos and the iNaturalist taxon ID.
+    Fetch iNaturalist photos with proper attribution (photographer name and license).
+    Returns a list of photo dictionaries with URL, photographer, and license info.
     """
     try:
-        # Search for taxon ID using autocomplete endpoint
+        # Search for taxon ID
         encoded_name = urllib.parse.quote(species_name)
         search_url = f"https://api.inaturalist.org/v1/taxa/autocomplete?q={encoded_name}&per_page=1"
         response = requests.get(search_url, timeout=10)
         data = response.json()
+        
         if not data.get('results'):
             return [], None
+            
         taxon = data['results'][0]
-        # Filter to ensure it's a species if possible
         if taxon.get('rank') != 'species':
-            return [], None
+            # Try to find species-level taxon
+            for result in data.get('results', []):
+                if result.get('rank') == 'species':
+                    taxon = result
+                    break
+        
         taxon_id = taxon['id']
-
         photos = []
-
-        # Add default photo if available
+        
+        # Get default photo if available
         default_photo = taxon.get('default_photo')
         if default_photo:
             photo_url = default_photo.get('medium_url') or default_photo.get('square_url')
             if photo_url:
-                # IMPROVEMENT 4: Use photo-specific user and license for default photo attribution
-                user = default_photo.get('user', {})
-                license_code = default_photo.get('license_code')
-                license_name = INAT_LICENSE_MAP.get(license_code, 'Unknown')
-                if license_name != 'Unknown':
-                    caption = f"Photo by {user.get('login', 'Unknown')} | License: {license_name}"
+                # Extract attribution from default photo
+                attribution = default_photo.get('attribution', '(c) Unknown photographer')
+                # Parse attribution string to extract photographer name
+                if attribution and '(c)' in attribution:
+                    photographer = attribution.split('(c)')[-1].split(',')[0].strip()
                 else:
-                    caption = f"Photo by {user.get('login', 'Unknown')}"
+                    photographer = 'Unknown photographer'
+                
+                license_code = default_photo.get('license_code', '')
+                license_name = INAT_LICENSE_MAP.get(license_code, 'All rights reserved')
+                
                 photos.append({
                     'url': photo_url,
-                    'caption': caption
+                    'photographer': photographer,
+                    'license': license_name,
+                    'caption': f"© {photographer} · {license_name}"
                 })
-
-        # Fetch top-voted observation photos (prioritizes chosen photos for the taxon)
-        obs_url = f"https://api.inaturalist.org/v1/observations?taxon_id={taxon_id}&has[]=photos&per_page={limit}&order_by=votes&order=desc"
+        
+        # Fetch observations with photos
+        obs_url = f"https://api.inaturalist.org/v1/observations?taxon_id={taxon_id}&photos=true&per_page={limit}&order_by=votes&order=desc"
         obs_response = requests.get(obs_url, timeout=10)
         obs_data = obs_response.json()
+        
         for obs in obs_data.get('results', [])[:limit]:
+            # Get observation user (photographer)
+            obs_user = obs.get('user', {})
+            photographer_name = obs_user.get('name') or obs_user.get('login', 'Unknown')
+            
             for photo in obs.get('photos', [])[:1]:  # One photo per observation
-                photo_url = photo.get('medium_url') or photo.get('square_url')
-                if photo_url and photo_url not in [p['url'] for p in photos]:  # Avoid duplicates
-                    user = photo.get('user', {})
-                    license_code = photo.get('license_code')
-                    license_name = INAT_LICENSE_MAP.get(license_code, 'Unknown')
-                    
-                    # IMPROVEMENT 4: Ensure photographer and license are in caption
-                    if license_name != 'Unknown':
-                        caption = f"Photo by {user.get('login', 'Unknown')} | License: {license_name}"
+                photo_url = photo.get('url', '').replace('square', 'medium')
+                if not photo_url:
+                    photo_url = photo.get('medium_url') or photo.get('square_url')
+                
+                if photo_url and photo_url not in [p['url'] for p in photos]:
+                    # Get photo-specific attribution if available
+                    photo_attribution = photo.get('attribution', '')
+                    if photo_attribution and '(c)' in photo_attribution:
+                        photo_photographer = photo_attribution.split('(c)')[-1].split(',')[0].strip()
                     else:
-                        caption = f"Photo by {user.get('login', 'Unknown')}"
-                        
+                        photo_photographer = photographer_name
+                    
+                    license_code = photo.get('license_code', '')
+                    license_name = INAT_LICENSE_MAP.get(license_code, 'All rights reserved')
+                    
                     photos.append({
                         'url': photo_url,
-                        'caption': caption
+                        'photographer': photo_photographer,
+                        'license': license_name,
+                        'caption': f"© {photo_photographer} · {license_name}"
                     })
+                
                 if len(photos) >= limit:
                     break
+            
             if len(photos) >= limit:
                 break
-
+        
         return photos, taxon_id
+        
     except Exception as e:
         logger.error(f"Error fetching iNat images for {species_name}: {e}")
         return [], None
@@ -524,7 +680,7 @@ def get_local_eflora_description(scientific_name, eflora_data):
         if matches and matches[1] >= 90:  # 90% similarity threshold
             matched_name = matches[0]
         else:
-            return False, f"Species {clean_name} not found in local database (even with fuzzy matching)"
+            return False, f"Species {clean_name} not found in local database"
     
     try:
         # Retrieve the matched row
@@ -549,7 +705,7 @@ def get_local_eflora_description(scientific_name, eflora_data):
         extracted_data = [f"**Scientific Name:** {full_scientific_name}"]
         
         if vernacular_names:
-            extracted_data.append(f"**Common Names:** {', '.join(vernacular_names[:5])}")  # Limit to 5 names
+            extracted_data.append(f"**Common Names:** {', '.join(vernacular_names[:5])}")
 
         # Priority sections in order of importance
         priority_sections = [
@@ -567,10 +723,10 @@ def get_local_eflora_description(scientific_name, eflora_data):
         for section in priority_sections:
             if section in descriptions and pd.notna(descriptions[section]):
                 desc_text = str(descriptions[section]).strip()
-                if desc_text and len(desc_text) > 10:  # Ignore very short descriptions
+                if desc_text and len(desc_text) > 10:
                     extracted_data.append(f"**{section}:**\n{desc_text}")
                     sections_added += 1
-                    if sections_added >= 4:  # Limit to 4 sections to avoid overwhelming
+                    if sections_added >= 4:
                         break
         
         # If no priority sections found, add any available sections
@@ -581,7 +737,7 @@ def get_local_eflora_description(scientific_name, eflora_data):
                     if desc_text and len(desc_text) > 10:
                         extracted_data.append(f"**{section}:**\n{desc_text}")
                         sections_added += 1
-                        if sections_added >= 2:  # Limit to 2 if using fallback sections
+                        if sections_added >= 2:
                             break
         
         if sections_added == 0:
@@ -602,7 +758,7 @@ def get_local_eflora_description(scientific_name, eflora_data):
         return False, f"Error retrieving data for {clean_name}"
 
 def create_phenology_chart(phenology_data, species_name):
-    """Create a chart using Plotly with botanical color scheme."""
+    """Create a professional chart using Plotly."""
     months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
               'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
     counts = [phenology_data.get(i, 0) for i in range(1, 13)]
@@ -611,27 +767,39 @@ def create_phenology_chart(phenology_data, species_name):
         x=months, 
         y=counts,
         marker=dict(
-            color='#4a7c24',
-            line=dict(color='#2d5016', width=1)
-        )
+            color='#5a7c3d',
+            line=dict(color='#2d5016', width=1.5)
+        ),
+        text=counts,
+        textposition='outside'
     ))
+    
     fig.update_layout(
-        title=f"Observations by Month: {species_name}",
+        title=dict(
+            text=f"Observations by Month: {species_name}",
+            font=dict(size=14, color='#1a3d07')
+        ),
         xaxis_title="Month",
         yaxis_title="Observation Count",
         height=400,
-        plot_bgcolor='#f5f5dc',
+        plot_bgcolor='#fafafa',
         paper_bgcolor='white',
-        font=dict(color='#2d5016')
+        font=dict(color='#1a1a1a'),
+        xaxis=dict(
+            gridcolor='#e0e0e0',
+            tickfont=dict(color='#1a1a1a')
+        ),
+        yaxis=dict(
+            gridcolor='#e0e0e0',
+            tickfont=dict(color='#1a1a1a')
+        )
     )
-    # IMPROVEMENT 2: Ensure axis tick labels are dark for readability
-    fig.update_xaxes(tickfont=dict(color='#2d5016'))
-    fig.update_yaxes(tickfont=dict(color='#2d5016'))
+    
     return fig
 
 def create_species_map(records, species_list, center_lat, center_lon):
-    """Create an interactive map with species observations - no black rectangle."""
-    # Create base map with clean styling
+    """Create an interactive map with species observations."""
+    # Create base map
     m = folium.Map(
         location=[center_lat, center_lon], 
         zoom_start=10,
@@ -645,16 +813,16 @@ def create_species_map(records, species_list, center_lat, center_lon):
         icon=folium.Icon(color='red', icon='info-sign')
     ).add_to(m)
     
-    # Botanical color palette for species
-    colors = ['#2d5016', '#4a7c24', '#6b5b4a', '#8b9d77', '#d4a574', 
-              '#9b6b43', '#7d9b5e', '#5a7c3d', '#4d6b2f', '#a08968']
+    # Professional color palette
+    colors = ['#2d5016', '#4a7c24', '#6b8e23', '#8fbc8f', '#556b2f', 
+              '#697565', '#8b7355', '#6b4423', '#7c5e4c', '#a0826d']
     
-    # Add species points (sample for performance)
+    # Add species points
     for i, species in enumerate(species_list[:10]):
         color = colors[i % len(colors)]
         species_records = [r for r in records if r.get('species') == species['name']]
         
-        for record in species_records[:50]:  # Limit points per species
+        for record in species_records[:50]:
             lat = record.get('decimalLatitude')
             lon = record.get('decimalLongitude')
             if lat and lon:
@@ -670,61 +838,57 @@ def create_species_map(records, species_list, center_lat, center_lon):
                     fillOpacity=0.6
                 ).add_to(m)
     
-    # Create a feature group for the legend to properly control its display
+    # Create legend
     legend_html = '''
     <div style="position: fixed; 
-                bottom: 50px; 
+                bottom: 60px; 
                 left: 50px; 
                 width: 280px; 
-                background-color: rgba(255, 255, 255, 0.95); 
-                border: 2px solid #2d5016; 
-                border-radius: 8px;
+                background-color: rgba(255, 255, 255, 0.98); 
+                border: 1px solid #d0d0d0; 
+                border-radius: 4px;
                 z-index: 9999; 
                 font-size: 12px; 
                 padding: 12px;
-                box-shadow: 0 4px 12px rgba(45, 80, 22, 0.3);
-                font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;">
-    <div style="color: #2d5016; font-weight: bold; font-size: 14px; margin-bottom: 8px; border-bottom: 2px solid #8b9d77; padding-bottom: 6px;">
-        🌿 Species Legend
+                box-shadow: 0 2px 6px rgba(0,0,0,0.1);
+                font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;">
+    <div style="color: #1a3d07; font-weight: 600; font-size: 13px; margin-bottom: 8px; border-bottom: 1px solid #e0e0e0; padding-bottom: 6px;">
+        Species Legend
     </div>
     '''
     
     for i, species in enumerate(species_list[:10]):
         color = colors[i % len(colors)]
-        # Truncate long species names
         display_name = species['name'] if len(species['name']) <= 25 else species['name'][:22] + '...'
         legend_html += f'''
         <div style="margin: 4px 0; display: flex; align-items: center;">
             <div style="background: {color}; 
-                        width: 18px; 
-                        height: 18px; 
+                        width: 14px; 
+                        height: 14px; 
                         border-radius: 50%; 
                         display: inline-block; 
                         margin-right: 8px; 
-                        border: 2px solid #2d5016;
+                        border: 1px solid #333;
                         flex-shrink: 0;">
             </div>
-            <span style="color: #2d5016; font-size: 11px; line-height: 1.3;">{display_name}</span>
+            <span style="color: #1a1a1a; font-size: 11px; line-height: 1.3;">{display_name}</span>
         </div>
         '''
     
     legend_html += '</div>'
     
-    # Add the legend as an HTML element
     m.get_root().html.add_child(folium.Element(legend_html))
     
     return m
 
-# --- START: Creator Acknowledgment Function ---
 def add_footer():
-    """Adds a fixed footer with creator and copyright information."""
+    """Adds a professional footer with creator information."""
     st.markdown(f"""
     <div class="footer">
-        Created by Daniel Cahen | Copyright © {datetime.now().year} | Licensed under the MIT License
+        Created by Daniel Cahen | © {datetime.now().year} | MIT License | 
+        <a href="https://github.com" target="_blank">GitHub</a>
     </div>
     """, unsafe_allow_html=True)
-# --- END: Creator Acknowledgment Function ---
-
 
 # Main Streamlit App
 def main():
@@ -737,23 +901,30 @@ def main():
         
         # Location settings
         st.subheader("📍 Location")
-        latitude = st.number_input("Latitude", value=-33.92, format="%.6f")
-        longitude = st.number_input("Longitude", value=18.42, format="%.6f")
-        radius_km = st.slider("Search Radius (km)", 1, 200, 25)
+        latitude = st.number_input("Latitude", value=-33.92, format="%.6f", 
+                                 help="Decimal latitude for search center")
+        longitude = st.number_input("Longitude", value=18.42, format="%.6f",
+                                   help="Decimal longitude for search center")
+        radius_km = st.slider("Search Radius (km)", 1, 200, 25,
+                            help="Radius around center point to search")
         
         # Search parameters  
         st.subheader("🌱 Taxon Search")
-        taxon_name = st.text_input("Taxon Name", value="Protea")
+        taxon_name = st.text_input("Taxon Name", value="Protea",
+                                  help="Scientific name of taxon to search (genus or higher)")
         user_features = st.text_area("Observed Features", 
-                                   placeholder="e.g., yellow flowers, serrated leaves...")
+                                   placeholder="e.g., yellow flowers, serrated leaves...",
+                                   help="Optional: describe features for future AI matching")
         
         # Options
         st.subheader("⚙️ Options")
-        include_images = st.checkbox("Include Images (slower)")
-        export_format = st.selectbox("Output Format", ["Markdown", "JSON"])
+        include_images = st.checkbox("Include Images", value=True,
+                                    help="Fetch images from iNaturalist (slower but more informative)")
+        export_format = st.selectbox("Export Format", ["Markdown", "JSON"],
+                                    help="Format for downloading results")
         
         # Actions
-        if st.button("🔍 Search GBIF", type="primary"):
+        if st.button("🔍 Search GBIF", type="primary", use_container_width=True):
             with st.spinner("Searching GBIF database..."):
                 # Load e-Flora data if not already loaded
                 if st.session_state.eflora_data is None:
@@ -774,7 +945,7 @@ def main():
         
         # Data diagnostics section
         with st.expander("🔧 Data Diagnostics"):
-            if st.button("Test e-Flora Data Loading"):
+            if st.button("Test e-Flora Data", use_container_width=True):
                 eflora_data = download_and_load_eflora()
                 if eflora_data is not None:
                     st.success(f"Successfully loaded {len(eflora_data)} taxa")
@@ -787,26 +958,17 @@ def main():
                         'Vernacular Names': [len(vn) if isinstance(vn, list) else 0 for vn in eflora_data['vernacularName'].head()]
                     })
                     st.dataframe(sample_df)
-                    
-                    # Show available description types
-                    all_desc_types = set()
-                    for descriptions in eflora_data['descriptions'].dropna():
-                        if isinstance(descriptions, dict):
-                            all_desc_types.update(descriptions.keys())
-                    
-                    st.subheader("Available Description Types:")
-                    st.write(sorted(list(all_desc_types)))
                 else:
                     st.error("Failed to load e-Flora data")
             
-            st.markdown("**File Requirements:**")
-            st.write("- `data/taxon.txt`: Must have columns 'id' and 'scientificName'")
-            st.write("- `data/description.txt`: Must have columns 'id', 'description', and 'type'")
-            st.write("- `data/vernacularname.txt`: Must have columns 'id' and 'vernacularName'")
-            st.write("- All files should be tab-separated (.txt) format")
+            st.markdown("**Required Files:**")
+            st.markdown("""
+            - `data/taxon.txt` - columns: 'id', 'scientificName'
+            - `data/description.txt` - columns: 'id', 'description', 'type'
+            - `data/vernacularname.txt` - columns: 'id', 'vernacularName'
+            """)
         
-        if st.button("🗑️ Clear Cache"):
-            # Clear cache directories
+        if st.button("🗑️ Clear Cache", use_container_width=True):
             for cache_dir in ['gbif_cache', 'cache']:
                 if os.path.exists(cache_dir):
                     import shutil
@@ -827,11 +989,11 @@ def main():
         ).add_to(preview_map)
         folium.Circle(
             location=[latitude, longitude],
-            radius=radius_km * 1000,  # Convert to meters
+            radius=radius_km * 1000,
             popup=f"Search radius: {radius_km} km",
-            color="#4a7c24",
+            color="#2d5016",
             fill=True,
-            fillColor="#8b9d77",
+            fillColor="#a4b494",
             fillOpacity=0.2,
             weight=2
         ).add_to(preview_map)
@@ -839,12 +1001,12 @@ def main():
         
     else:
         # Display search results
-        st.success(f"Found {len(st.session_state.species_data)} species!")
+        st.success(f"Found {len(st.session_state.species_data)} species in the search area")
         
         # Prepare species options for multiselect
         species_list_limited = st.session_state.species_data[:50]
         species_options = [
-            f"{sp['name']} - *{sp['family']}* ({sp['count']} record{'s' if sp['count'] != 1 else ''}){sp['status_flag']}"
+            f"{sp['name']} - {sp['family']} ({sp['count']} records){sp['status_flag']}"
             for sp in species_list_limited
         ]
         st.session_state.species_options = species_options
@@ -853,39 +1015,34 @@ def main():
         tab1, tab2, tab3, tab4 = st.tabs(["📊 Species List", "🗺️ Map View", "📈 Analysis", "📄 Export"])
         
         with tab1:
-            st.subheader("Select Species for Detailed Analysis")
+            st.subheader("Species Found in Search Area")
             
             # Create DataFrame for display
             df = pd.DataFrame(st.session_state.species_data)
-            df_display = df[['name', 'family', 'count', 'status_flag']].copy()
-            df_display.columns = ['Species', 'Family', 'Records', 'Status']
-            st.dataframe(df_display, use_container_width=True)
+            df_display = df[['name', 'family', 'count']].copy()
+            df_display.columns = ['Species', 'Family', 'Records']
+            st.dataframe(df_display, use_container_width=True, height=300)
             
-            # Define callback functions
-            def select_all():
-                st.session_state.species_selector = st.session_state.species_options[:]
-                st.rerun()
+            # Selection controls
+            st.subheader("Select Species for Detailed Analysis")
             
-            def deselect_all():
-                st.session_state.species_selector = []
-                st.rerun()
-            
-            def top_ten():
-                st.session_state.species_selector = st.session_state.species_options[:10]
-                st.rerun()
-            
-            # Selection control buttons
             col1, col2, col3 = st.columns(3)
             with col1:
-                st.button("Select All", on_click=select_all)
+                if st.button("Select All", use_container_width=True):
+                    st.session_state.species_selector = st.session_state.species_options[:]
+                    st.rerun()
             with col2:
-                st.button("Deselect All", on_click=deselect_all)
+                if st.button("Clear Selection", use_container_width=True):
+                    st.session_state.species_selector = []
+                    st.rerun()
             with col3:
-                st.button("Top 10 Only", on_click=top_ten)
+                if st.button("Top 10", use_container_width=True):
+                    st.session_state.species_selector = st.session_state.species_options[:10]
+                    st.rerun()
             
             # Multiselect for species selection
             selected_labels = st.multiselect(
-                "Select species for analysis:",
+                "Select species:",
                 st.session_state.species_options,
                 key="species_selector",
                 format_func=lambda x: x
@@ -894,30 +1051,26 @@ def main():
             # Map selected labels back to species names
             selected_names = []
             for label in selected_labels:
-                # Extract name from label (first part before ' - ')
                 name = label.split(' - ')[0]
                 selected_names.append(name)
             
-            # Update session state for compatibility
             st.session_state.selected_species = {name: True for name in selected_names}
             
             # Process selected species
-            selected_count = len(selected_names)
-            if selected_count > 0:
-                st.info(f"Selected {selected_count} species for processing")
+            if len(selected_names) > 0:
+                st.info(f"Selected {len(selected_names)} species for analysis")
                 
-                if st.button("📊 Generate Analysis", type="primary"):
+                if st.button("📊 Generate Detailed Analysis", type="primary", use_container_width=True):
                     selected_species_data = [
                         sp for sp in st.session_state.species_data 
                         if sp['name'] in selected_names
                     ]
                     
                     with st.spinner("Processing selected species..."):
-                        # Generate detailed analysis
-                        st.subheader("🔍 Detailed Species Analysis")
+                        st.subheader("🔍 Detailed Species Information")
                         
-                        for species in selected_species_data[:10]:  # Limit for demo
-                            with st.expander(f"📋 {species['name']} ({species['count']} records)", expanded=True):
+                        for species in selected_species_data[:10]:
+                            with st.expander(f"📋 {species['name']} - {species['family']} ({species['count']} records)", expanded=True):
                                 if include_images:
                                     col1, col2, col3 = st.columns([2, 1, 1])
                                 else:
@@ -932,35 +1085,48 @@ def main():
                                     if success:
                                         st.markdown(description)
                                     else:
-                                        st.warning(f"No local description available: {description}")
-                                        st.info(f"**Family:** {species['family']}")
-                                        st.info(f"**GBIF Records:** {species['count']}")
+                                        st.warning(f"No local description available")
+                                        st.markdown(f"**Scientific Name:** {species['name']}")
+                                        st.markdown(f"**Family:** {species['family']}")
+                                        st.markdown(f"**GBIF Records:** {species['count']}")
                                 
                                 if include_images:
                                     with col2:
-                                        # Multiple iNaturalist images if enabled
-                                        with st.spinner("Fetching images..."):
-                                            # Get taxon_id for link
+                                        # Display iNaturalist images with attribution
+                                        with st.spinner("Loading images..."):
                                             images_data, taxon_id = get_species_images(species['name'])
+                                            
                                             if images_data:
-                                                for img_data in images_data:
+                                                st.markdown("**Photos from iNaturalist:**")
+                                                for img_data in images_data[:3]:  # Limit to 3 images
                                                     try:
                                                         response = requests.get(img_data['url'], timeout=10)
                                                         img = Image.open(io.BytesIO(response.content))
-                                                        # Caption includes photographer and license
-                                                        st.image(img, caption=img_data['caption'], use_container_width=True)
-                                                    except:
-                                                        st.warning("Failed to load one or more images")
-                                                st.caption(f"Showing top {len(images_data)} iNaturalist photos (default + top-voted)")
+                                                        
+                                                        # Display image with caption
+                                                        st.image(img, caption=img_data['caption'], 
+                                                               use_container_width=True)
+                                                        
+                                                        # Add attribution below image
+                                                        st.markdown(f"""
+                                                        <div class="photo-attribution">
+                                                            📷 {img_data['photographer']}<br>
+                                                            📜 {img_data['license']}
+                                                        </div>
+                                                        """, unsafe_allow_html=True)
+                                                        
+                                                    except Exception as e:
+                                                        st.warning(f"Failed to load image")
                                                 
-                                                # Provide link to all iNaturalist images
+                                                # Link to iNaturalist
                                                 if taxon_id:
-                                                    inat_link = f"https://www.inaturalist.org/taxa/{taxon_id}/browse_photos"
-                                                    st.markdown(f"[View all iNaturalist images for {species['name']} ↗]({inat_link})")
+                                                    inat_link = f"https://www.inaturalist.org/taxa/{taxon_id}"
+                                                    st.markdown(f"[View on iNaturalist ↗]({inat_link})")
                                             else:
-                                                st.info("No iNaturalist photos available")
+                                                st.info("No photos available")
+                                
                                 with col3 if include_images else col2:
-                                    # Observations by month chart
+                                    # Phenology chart
                                     if species.get('phenology'):
                                         fig = create_phenology_chart(species['phenology'], species['name'])
                                         st.plotly_chart(fig, use_container_width=True)
@@ -975,15 +1141,15 @@ def main():
                     longitude
                 )
                 st_folium(species_map, height=600, width=700)
-                st.info("🎯 Red marker = search center | Colored dots = species observations (top 10 species shown, up to 50 records each)")
+                st.info("🎯 Red marker = search center | Colored dots = species observations")
             else:
-                st.warning("Map data not available. Run search first.")
+                st.warning("Map data not available")
         
         with tab3:
             st.subheader("📈 Search Statistics")
             
             if st.session_state.species_data:
-                # Summary statistics
+                # Summary metrics
                 col1, col2, col3, col4 = st.columns(4)
                 
                 total_species = len(st.session_state.species_data)
@@ -992,7 +1158,7 @@ def main():
                 avg_records = total_records / total_species if total_species > 0 else 0
                 
                 col1.metric("Species Found", total_species)
-                col2.metric("Total Records", total_records)
+                col2.metric("Total Records", f"{total_records:,}")
                 col3.metric("Families", len(families))
                 col4.metric("Avg Records/Species", f"{avg_records:.1f}")
                 
@@ -1006,14 +1172,20 @@ def main():
                     top_families = sorted(family_counts.items(), key=lambda x: x[1], reverse=True)[:10]
                     families_df = pd.DataFrame(top_families, columns=['Family', 'Species Count'])
                     
-                    fig = px.bar(families_df, x='Species Count', y='Family', orientation='h',
-                               title="Top 10 Families by Species Count",
-                               color_discrete_sequence=['#4a7c24'])
+                    fig = px.bar(
+                        families_df, 
+                        x='Species Count', 
+                        y='Family', 
+                        orientation='h',
+                        title="Top 10 Families by Species Count",
+                        color_discrete_sequence=['#5a7c3d']
+                    )
                     fig.update_layout(
                         height=400,
-                        plot_bgcolor='#f5f5dc',
+                        plot_bgcolor='#fafafa',
                         paper_bgcolor='white',
-                        font=dict(color='#2d5016')
+                        font=dict(color='#1a1a1a'),
+                        title=dict(font=dict(color='#1a3d07'))
                     )
                     st.plotly_chart(fig, use_container_width=True)
         
@@ -1034,7 +1206,6 @@ def main():
                             "radius_km": radius_km,
                             "taxon_searched": taxon_name,
                             "selected_species_count": len(selected_species_data),
-                            "user_features": user_features,
                             "timestamp": datetime.now().isoformat()
                         },
                         "species": []
@@ -1049,7 +1220,6 @@ def main():
                             "name": species['name'],
                             "family": species['family'],
                             "gbif_count": species['count'],
-                            "status_flag": species['status_flag'],
                             "description": description if success else "No description available",
                             "phenology": species.get('phenology', {})
                         })
@@ -1058,34 +1228,28 @@ def main():
                     st.download_button(
                         label="📥 Download JSON",
                         data=json_str,
-                        file_name=f"botanical_data_{taxon_name}_{datetime.now().strftime('%Y%m%d_%H%M')}.json",
-                        mime="application/json"
+                        file_name=f"botanical_data_{datetime.now().strftime('%Y%m%d_%H%M')}.json",
+                        mime="application/json",
+                        use_container_width=True
                     )
                     
-                    with st.expander("Preview JSON Output"):
+                    with st.expander("Preview JSON"):
                         st.json(export_data)
                 
                 else:
                     # Markdown export
                     markdown_parts = [
                         f"# Botanical Identification Report",
+                        f"",
                         f"**Location:** {latitude}, {longitude}",
                         f"**Search Radius:** {radius_km} km",
                         f"**Target Taxon:** {taxon_name}",
                         f"**Generated:** {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}",
                         f"**Selected Species:** {len(selected_species_data)}",
-                        "",
-                        "## Species Summary",
-                        "| Species | Family | Records | Status |",
-                        "|---------|--------|---------|--------|"
+                        f"",
+                        f"## Species Details",
+                        f""
                     ]
-                    
-                    for species in selected_species_data:
-                        markdown_parts.append(
-                            f"| {species['name']} | {species['family']} | {species['count']} | {species['status_flag']} |"
-                        )
-                    
-                    markdown_parts.extend(["", "## Detailed Descriptions", ""])
                     
                     for species in selected_species_data:
                         success, description = get_local_eflora_description(
@@ -1094,30 +1258,31 @@ def main():
                         
                         markdown_parts.extend([
                             f"### {species['name']}",
-                            f"**Family:** {species['family']} | **Records:** {species['count']}{species['status_flag']}",
-                            "",
+                            f"**Family:** {species['family']}",
+                            f"**GBIF Records:** {species['count']}",
+                            f"",
                             description if success else "No description available.",
-                            "",
+                            f"",
                             "---",
-                            ""
+                            f""
                         ])
                     
                     markdown_str = "\n".join(markdown_parts)
                     
                     st.download_button(
-                        label="📥 Download Markdown",
+                        label="📥 Download Markdown Report",
                         data=markdown_str,
-                        file_name=f"botanical_report_{taxon_name}_{datetime.now().strftime('%Y%m%d_%H%M')}.md",
-                        mime="text/markdown"
+                        file_name=f"botanical_report_{datetime.now().strftime('%Y%m%d_%H%M')}.md",
+                        mime="text/markdown",
+                        use_container_width=True
                     )
                     
-                    with st.expander("Preview Markdown Output"):
+                    with st.expander("Preview Markdown"):
                         st.markdown(markdown_str)
-            
             else:
-                st.warning("No species selected for export. Please select species in the Species List tab.")
+                st.warning("Please select species in the Species List tab first")
 
-    # Add the footer for creator acknowledgment and copyright
+    # Add footer
     add_footer()
 
 if __name__ == "__main__":
