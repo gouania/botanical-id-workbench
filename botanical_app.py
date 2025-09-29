@@ -971,7 +971,7 @@ def main():
         st.header("🔧 Search Parameters")
         
         # Location settings
-                st.subheader("📍 Location")
+        st.subheader("📍 Location")
         
         # Use session state to store the actual coordinates being used
         if 'current_latitude' not in st.session_state:
