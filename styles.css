@@ -1,0 +1,236 @@
+/* --- THEME-ADAPTIVE CSS VARIABLES --- */
+:root {
+    /* Light theme defaults (matching Streamlit light theme) */
+    --text-primary: #1a1a1a;
+    --text-secondary: #4a4a4a;
+    --bg-primary: #ffffff;
+    --bg-secondary: #f0f2f6;
+    --input-bg: #ffffff;
+    --table-bg: #f9f9f5;
+    --table-header-bg: #e8e8e8;
+    --sidebar-gradient: linear-gradient(180deg, #ffffff 0%, #f9f9f5 100%);
+    --alert-bg: #ffffff;
+    --border-color: #d0d0d0;
+    --shadow-color: rgba(0,0,0,0.1);
+    
+    /* Botanical accents (consistent across themes) */
+    --dark-green: #1a3d07;
+    --forest-green: #2d5016;
+    --sage-green: #5a7c3d;
+    --light-sage: #a4b494;
+    --earth-brown: #4a3c28;
+    --light-background: #f9f9f5;
+    --cream: #fffef9;
+}
+
+/* --- DARK THEME OVERRIDES --- */
+@media (prefers-color-scheme: dark) {
+    :root {
+        --text-primary: #ffffff;
+        --text-secondary: #e0e0e0;
+        --bg-primary: #0e1117;
+        --bg-secondary: #262730;
+        --input-bg: #262730;
+        --table-bg: #1a1a1a;
+        --table-header-bg: #2a2a2a;
+        --sidebar-gradient: linear-gradient(180deg, #262730 0%, #1a1a1a 100%);
+        --alert-bg: #1a1a1a;
+        --border-color: #404040;
+        --shadow-color: rgba(0,0,0,0.3);
+    }
+    
+    /* Alert box dark theme backgrounds */
+    .stAlert[data-baseweb="notification-info"] { background-color: #1a1a2e; }
+    .stAlert[data-baseweb="notification-success"] { background-color: #1a2e1a; }
+    .stAlert[data-baseweb="notification-warning"] { background-color: #2e2a1a; }
+    .stAlert[data-baseweb="notification-error"] { background-color: #2e1a1a; }
+
+    /* Custom class dark theme background */
+    .photo-attribution { background-color: rgba(0, 0, 0, 0.95); }
+}
+
+/* --- GLOBAL STYLING --- */
+.stApp, p, .stMarkdown {
+    color: var(--text-primary) !important;
+    background-color: var(--bg-primary);
+    font-family: 'Arial', sans-serif;
+    line-height: 1.6;
+}
+
+[data-testid="stAppViewContainer"] {
+    background-color: var(--bg-primary);
+}
+
+h1 {
+    color: var(--text-primary) !important;
+    font-weight: 600;
+    border-bottom: 2px solid var(--light-sage);
+    padding-bottom: 10px;
+}
+
+h2, h3 {
+    color: var(--text-primary) !important;
+    font-weight: 500;
+}
+
+/* --- COMPONENT-SPECIFIC STYLING --- */
+
+/* Sidebar */
+[data-testid="stSidebar"] {
+    background: var(--sidebar-gradient);
+    border-right: 1px solid var(--border-color);
+}
+[data-testid="stSidebar"] * { color: var(--text-primary); }
+[data-testid="stSidebar"] label { color: var(--text-primary) !important; font-weight: 500; }
+[data-testid="stSidebar"] .stMarkdown { color: var(--text-primary) !important; }
+[data-testid="stSidebar"] input, [data-testid="stSidebar"] textarea {
+    color: var(--text-primary) !important;
+    background-color: var(--input-bg) !important;
+    border: 1px solid var(--border-color) !important;
+    color-scheme: light dark;
+}
+
+/* Metrics */
+[data-testid="stMetricValue"] { color: var(--dark-green) !important; font-weight: 600; font-size: 1.8rem !important; }
+[data-testid="stMetricLabel"] { color: var(--text-secondary) !important; font-weight: 500; font-size: 0.9rem !important; }
+
+/* Buttons */
+.stButton > button {
+    background-color: var(--forest-green);
+    color: white !important; /* Force white text on green bg for high contrast */
+    border-radius: 4px;
+    border: 1px solid var(--dark-green);
+    padding: 0.5rem 1.2rem;
+    font-weight: 500;
+    transition: all 0.2s;
+    box-shadow: 0 2px 4px var(--shadow-color);
+}
+.stButton > button:hover {
+    background-color: var(--dark-green);
+    box-shadow: 0 4px 8px var(--shadow-color);
+    transform: translateY(-1px);
+}
+.stButton > button[kind="primary"] { background-color: var(--sage-green); border-color: var(--forest-green); }
+.stButton > button[kind="primary"]:hover { background-color: var(--forest-green); }
+
+/* Tabs */
+.stTabs [data-baseweb="tab-list"] {
+    gap: 4px;
+    background-color: var(--bg-secondary);
+    padding: 4px;
+    border-radius: 4px;
+    border: 1px solid var(--border-color);
+}
+.stTabs [data-baseweb="tab"] {
+    color: var(--text-secondary) !important;
+    background-color: transparent;
+    border-radius: 3px;
+    padding: 8px 16px;
+    font-weight: 500;
+}
+.stTabs [aria-selected="true"] { background-color: var(--forest-green) !important; color: white !important; }
+
+/* Expanders */
+.streamlit-expanderHeader {
+    background-color: var(--bg-secondary);
+    color: var(--text-primary) !important;
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+    font-weight: 500;
+}
+.streamlit-expanderContent {
+    background-color: var(--bg-primary);
+    border: 1px solid var(--border-color);
+    border-top: none;
+    border-radius: 0 0 4px 4px;
+    padding: 1rem;
+    color: var(--text-primary);
+}
+
+/* Alerts (base and light theme) */
+.stAlert {
+    background-color: var(--alert-bg);
+    border: 1px solid var(--border-color);
+    border-left: 4px solid var(--forest-green);
+    border-radius: 4px;
+    color: var(--text-primary) !important;
+}
+.stAlert[data-baseweb="notification-info"] { background-color: #f0f8ff; border-left-color: #4a90e2; }
+.stAlert[data-baseweb="notification-success"] { background-color: #f0fff4; border-left-color: var(--sage-green); }
+.stAlert[data-baseweb="notification-warning"] { background-color: #fffbf0; border-left-color: #f5a623; }
+.stAlert[data-baseweb="notification-error"] { background-color: #fff5f5; border-left-color: #e74c3c; }
+
+/* Inputs, Text Areas, Selects */
+.stTextInput > div > div > input,
+.stNumberInput > div > div > input,
+.stTextArea > div > div > textarea {
+    color: var(--text-primary) !important;
+    background-color: var(--input-bg) !important;
+    border: 1px solid var(--border-color) !important;
+    border-radius: 4px;
+    padding: 8px 12px;
+}
+.stTextInput > div > div > input:focus,
+.stNumberInput > div > div > input:focus,
+.stTextArea > div > div > textarea:focus {
+    border-color: var(--forest-green) !important;
+    box-shadow: 0 0 0 2px rgba(45, 80, 22, 0.1) !important;
+}
+.stSelectbox > div > div, .stMultiSelect > div > div {
+    color: var(--text-primary) !important;
+    background-color: var(--input-bg) !important;
+}
+.stMultiSelect > div > div { border: 1px solid var(--border-color) !important; border-radius: 4px; }
+
+/* Fix for number input stepper arrows (plus/minus signs) */
+[data-testid="stNumberInput"] button svg { fill: #ff0000 !important; stroke: #ff0000 !important; }
+
+/* Dataframes */
+.dataframe { border: 1px solid var(--border-color) !important; background-color: var(--table-bg) !important; color: var(--text-primary) !important; }
+.dataframe thead th { background-color: var(--table-header-bg) !important; color: var(--text-primary) !important; font-weight: 600; border-bottom: 2px solid var(--border-color) !important; }
+.dataframe tbody td { color: var(--text-primary) !important; background-color: var(--table-bg) !important; }
+
+/* Progress & Sliders */
+.stProgress > div > div > div { background-color: var(--sage-green) !important; }
+.stSlider > div > div > div { color: var(--text-primary) !important; }
+.stSlider [data-baseweb="slider-track"] { background-color: var(--light-sage) !important; }
+.stSlider [data-baseweb="slider-track-filled"] { background-color: var(--forest-green) !important; }
+
+/* Image Captions */
+.stImage > div > div > div > div {
+    color: var(--text-secondary) !important;
+    font-size: 0.85rem;
+    background-color: var(--bg-secondary);
+    padding: 4px 8px;
+    border-radius: 0 0 4px 4px;
+    margin-top: -4px;
+}
+
+/* --- CUSTOM CLASSES --- */
+
+/* Footer */
+.footer {
+    position: fixed; left: 0; bottom: 0; width: 100%;
+    background-color: var(--bg-secondary);
+    color: var(--text-secondary);
+    text-align: center;
+    padding: 8px;
+    font-size: 0.75rem;
+    border-top: 1px solid var(--border-color);
+    z-index: 999;
+}
+.footer a { color: var(--forest-green); text-decoration: none; font-weight: 500; }
+.footer a:hover { text-decoration: underline; }
+
+/* Photo Attribution */
+.photo-attribution {
+    background-color: rgba(255, 255, 255, 0.95);
+    padding: 6px 10px;
+    border-radius: 4px;
+    font-size: 0.8rem;
+    color: var(--text-secondary);
+    margin-top: 4px;
+    border: 1px solid var(--border-color);
+}
+.photo-attribution a { color: var(--forest-green); text-decoration: none; }
+.photo-attribution a:hover { text-decoration: underline; }
