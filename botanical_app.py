@@ -1137,12 +1137,15 @@ def main():
                     page_size = 10
                     total_pages = math.ceil(len(st.session_state.analysis_data) / page_size)
                     
-                    # Ensure valid page in session state
-                    if 'detail_page' not in st.session_state or st.session_state.detail_page > total_pages:
+                    # Handle pagination safely
+                    if 'detail_page' not in st.session_state:
                         st.session_state.detail_page = 1
+                    current_page = max(1, min(int(st.session_state.detail_page), total_pages))
                     
-                    page = st.slider("Page", 1, total_pages, st.session_state.detail_page, key="detail_page")
-                    start_idx = (page - 1) * page_size
+                    page = st.slider("Page", 1, total_pages, current_page, key="detail_page_slider")
+                    st.session_state.detail_page = int(page)
+                    
+                    start_idx = (int(page) - 1) * page_size
                     end_idx = start_idx + page_size
                     paginated_species = st.session_state.analysis_data[start_idx:end_idx]
                     
