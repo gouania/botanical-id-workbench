@@ -24,6 +24,7 @@ import plotly.graph_objects as go
 from PIL import Image
 import io
 import urllib.parse
+import textwrap
 
 # Global headers for iNaturalist API requests
 INAT_HEADERS = {
@@ -1235,16 +1236,17 @@ def main():
                     with st.expander("Preview JSON"):
                         st.json(export_data)
                         js_json = json_str.replace('\\', '\\\\').replace('`', '\\`')
-                        st.markdown(f"""
-                        <script>
-                        function copyJson() {{
-                          navigator.clipboard.writeText(`{js_json}`).then(() => {{
-                            alert('Copied JSON to clipboard!');
-                          }});
-                        }}
-                        </script>
-                        <button onclick="copyJson()" style="background-color: #2d5016; color: white; border: none; padding: 8px 16px; border-radius: 4px; cursor: pointer; font-size: 14px;">Copy JSON</button>
-                        """, unsafe_allow_html=True)
+                        script_html = textwrap.dedent(f"""
+                            <script>
+                            function copyJson() {{
+                              navigator.clipboard.writeText(`{js_json}`).then(() => {{
+                                alert('Copied JSON to clipboard!');
+                              }});
+                            }}
+                            </script>
+                            <button onclick="copyJson()" style="background-color: #2d5016; color: white; border: none; padding: 8px 16px; border-radius: 4px; cursor: pointer; font-size: 14px;">Copy JSON</button>
+                        """)
+                        st.markdown(script_html, unsafe_allow_html=True)
                 
                 else:
                     # Markdown export
@@ -1290,16 +1292,17 @@ def main():
                     with st.expander("Preview Markdown"):
                         st.markdown(markdown_str)
                         js_md = markdown_str.replace('\\', '\\\\').replace('`', '\\`')
-                        st.markdown(f"""
-                        <script>
-                        function copyMarkdown() {{
-                          navigator.clipboard.writeText(`{js_md}`).then(() => {{
-                            alert('Copied Markdown to clipboard!');
-                          }});
-                        }}
-                        </script>
-                        <button onclick="copyMarkdown()" style="background-color: #2d5016; color: white; border: none; padding: 8px 16px; border-radius: 4px; cursor: pointer; font-size: 14px;">Copy Markdown</button>
-                        """, unsafe_allow_html=True)
+                        script_html = textwrap.dedent(f"""
+                            <script>
+                            function copyMarkdown() {{
+                              navigator.clipboard.writeText(`{js_md}`).then(() => {{
+                                alert('Copied Markdown to clipboard!');
+                              }});
+                            }}
+                            </script>
+                            <button onclick="copyMarkdown()" style="background-color: #2d5016; color: white; border: none; padding: 8px 16px; border-radius: 4px; cursor: pointer; font-size: 14px;">Copy Markdown</button>
+                        """)
+                        st.markdown(script_html, unsafe_allow_html=True)
             else:
                 st.warning("Please select species in the Species List tab first")
 
