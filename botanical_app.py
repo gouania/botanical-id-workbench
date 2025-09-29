@@ -947,9 +947,6 @@ def main():
         st.subheader("🌱 Taxon Search")
         taxon_name = st.text_input("Taxon Name", value="Protea",
                                   help="Scientific name of taxon to search (genus or higher)")
-        user_features = st.text_area("Observed Features", 
-                                   placeholder="e.g., yellow flowers, serrated leaves...",
-                                   help="Optional: describe features for future AI matching")
         
         # Options
         st.subheader("⚙️ Options")
