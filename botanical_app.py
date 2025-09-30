@@ -606,6 +606,207 @@ def create_copy_button(copy_text, label):
     </script>
     """, height=80)
 
+# Add these new functions after your existing utility functions
+
+@st.cache_data(ttl=3600)
+def get_cached_hierarchy(species_name: str) -> List[Dict]:
+    """Cache hierarchy lookups to avoid repeated API calls."""
+    _, _, ancestors = get_species_details(species_name, fetch_hierarchy=True)
+    return ancestors
+
+def get_available_ranks_and_values(species_data: List[Dict], sample_size: int = 20) -> Dict[str, set]:
+    """
+    Sample species to discover available taxonomic ranks and their values.
+    Returns a dict like: {'genus': {'Protea', 'Leucadendron', ...}, 'tribe': {'Proteae', ...}}
+    """
+    ranks_values = {}
+    
+    # Sample a subset to avoid fetching hierarchy for all species
+    sample = species_data[:min(sample_size, len(species_data))]
+    
+    with st.spinner(f"Discovering taxonomic structure (sampling {len(sample)} species)..."):
+        for sp in sample:
+            hierarchy = get_cached_hierarchy(sp['name'])
+            for anc in hierarchy:
+                rank = anc.get('rank')
+                name = anc.get('name')
+                if rank and name:
+                    if rank not in ranks_values:
+                        ranks_values[rank] = set()
+                    ranks_values[rank].add(name)
+    
+    return ranks_values
+
+def filter_species_by_rank_optimized(
+    species_data: List[Dict], 
+    rank: str, 
+    name: str, 
+    fuzzy_threshold: int = 85
+) -> Tuple[List[Dict], int]:
+    """
+    Optimized filtering with fuzzy matching and progress tracking.
+    Returns (filtered_species, total_checked)
+    """
+    filtered = []
+    checked = 0
+    
+    # Create a progress container
+    progress_container = st.container()
+    with progress_container:
+        progress_bar = st.progress(0)
+        status_text = st.empty()
+    
+    for i, sp in enumerate(species_data):
+        # Update progress
+        progress = (i + 1) / len(species_data)
+        progress_bar.progress(progress)
+        status_text.text(f"Checking species {i+1}/{len(species_data)}... Found {len(filtered)} matches")
+        
+        # Get hierarchy (cached)
+        hierarchy = get_cached_hierarchy(sp['name'])
+        
+        # Check for match
+        match_found = False
+        for anc in hierarchy:
+            if anc.get('rank') == rank:
+                # Try exact match first
+                if anc.get('name', '').lower() == name.lower():
+                    match_found = True
+                    break
+                # Try fuzzy match
+                elif fuzzy_threshold > 0:
+                    score = fuzz.ratio(anc.get('name', '').lower(), name.lower())
+                    if score >= fuzzy_threshold:
+                        match_found = True
+                        break
+        
+        if match_found:
+            sp_copy = sp.copy()
+            sp_copy['hierarchy'] = hierarchy  # Store for later use
+            filtered.append(sp_copy)
+        
+        checked += 1
+    
+    # Clear progress indicators
+    progress_bar.empty()
+    status_text.empty()
+    
+    return filtered, checked
+
+# Enhanced sidebar implementation (replace the existing filter section)
+def render_enhanced_rank_filter(st_container):
+    """Render enhanced rank filter in the given container."""
+    
+    st_container.subheader("🔍 Advanced Taxonomic Filter")
+    
+    # Initialize filter state
+    if 'rank_filter_enabled' not in st.session_state:
+        st.session_state.rank_filter_enabled = False
+    if 'discovered_ranks' not in st.session_state:
+        st.session_state.discovered_ranks = None
+    
+    # Enable/disable filter
+    filter_enabled = st_container.checkbox(
+        "Enable Rank Filter", 
+        value=st.session_state.rank_filter_enabled,
+        help="Filter species by taxonomic rank (e.g., all species in a specific genus)"
+    )
+    st.session_state.rank_filter_enabled = filter_enabled
+    
+    if filter_enabled and st.session_state.species_data:
+        # Discover available ranks if not already done
+        if st.session_state.discovered_ranks is None:
+            if st_container.button("🔎 Discover Available Ranks", use_container_width=True):
+                ranks_values = get_available_ranks_and_values(st.session_state.species_data)
+                st.session_state.discovered_ranks = ranks_values
+                st.rerun()
+        
+        if st.session_state.discovered_ranks:
+            # Sort ranks by taxonomic level (approximate)
+            rank_order = ['kingdom', 'phylum', 'class', 'order', 'family', 
+                         'subfamily', 'tribe', 'subtribe', 'genus', 'subgenus', 
+                         'section', 'species_group', 'species']
+            available_ranks = list(st.session_state.discovered_ranks.keys())
+            sorted_ranks = [r for r in rank_order if r in available_ranks]
+            sorted_ranks.extend([r for r in available_ranks if r not in rank_order])
+            
+            # Rank selection
+            selected_rank = st_container.selectbox(
+                "Select Taxonomic Rank",
+                sorted_ranks,
+                help="Choose the taxonomic level to filter by"
+            )
+            
+            # Value selection for the rank
+            if selected_rank:
+                available_values = sorted(list(st.session_state.discovered_ranks[selected_rank]))
+                
+                # Provide both dropdown and text input
+                col1, col2 = st_container.columns([3, 1])
+                
+                with col1:
+                    # Dropdown for known values
+                    selected_value = st.selectbox(
+                        f"Select {selected_rank.title()}",
+                        [""] + available_values,
+                        help=f"Choose from discovered {selected_rank} values"
+                    )
+                
+                with col2:
+                    # Custom input option
+                    custom_value = st.text_input(
+                        "Or type custom",
+                        help="Enter a custom value"
+                    )
+                
+                # Use custom value if provided, otherwise use dropdown
+                final_value = custom_value if custom_value else selected_value
+                
+                if final_value:
+                    # Fuzzy matching threshold
+                    fuzzy_threshold = st_container.slider(
+                        "Match Sensitivity",
+                        0, 100, 85,
+                        help="Lower = more lenient matching (0 = exact match only)"
+                    )
+                    
+                    # Preview button
+                    if st_container.button("🔍 Preview Filter", use_container_width=True):
+                        with st.spinner("Calculating filter preview..."):
+                            # Quick check on a sample
+                            sample_size = min(10, len(st.session_state.species_data))
+                            sample_matches = 0
+                            
+                            for sp in st.session_state.species_data[:sample_size]:
+                                hierarchy = get_cached_hierarchy(sp['name'])
+                                for anc in hierarchy:
+                                    if anc.get('rank') == selected_rank:
+                                        if fuzzy_threshold == 0:
+                                            if anc.get('name', '').lower() == final_value.lower():
+                                                sample_matches += 1
+                                                break
+                                        else:
+                                            score = fuzz.ratio(anc.get('name', '').lower(), final_value.lower())
+                                            if score >= fuzzy_threshold:
+                                                sample_matches += 1
+                                                break
+                            
+                            estimated_matches = int((sample_matches / sample_size) * len(st.session_state.species_data))
+                            st_container.info(f"Estimated matches: ~{estimated_matches} species")
+                    
+                    # Store filter settings
+                    st.session_state.rank_filter_settings = {
+                        'rank': selected_rank,
+                        'value': final_value,
+                        'fuzzy_threshold': fuzzy_threshold
+                    }
+                else:
+                    st_container.warning(f"Please select or enter a {selected_rank} to filter by")
+        else:
+            st_container.info("Click 'Discover Available Ranks' to explore filter options")
+    
+    return filter_enabled
+
 # Main Streamlit App
 def main():
     st.title("🌿 Botanical ID Workbench: South Africa")
@@ -667,11 +868,9 @@ def main():
         taxon_name = st.text_input("Taxon Name", value="Protea",
                                    help="Scientific name of taxon to search (genus or higher)")
         
-        st.subheader("🔍 Filter by Rank")
-        rank_options = ["tribe", "subtribe", "subfamily", "genus", "species_group"]  # Common intermediates
-        selected_rank = st.selectbox("Select Rank", rank_options)
-        rank_name = st.text_input("Rank Name (e.g., Atripliceae)", placeholder="Leave blank to disable")
-
+        # Enhanced rank filter
+        filter_enabled = render_enhanced_rank_filter(st.sidebar)
+        
         # Options
         st.subheader("⚙️ Options")
         include_images = st.checkbox("Include Images", value=True,
@@ -766,18 +965,27 @@ def main():
         # Display search results
         st.success(f"Found {len(st.session_state.species_data)} species in the search area")
 
-        # Apply rank filter if specified
         filtered_data = st.session_state.species_data
-        if rank_name:  # From sidebar
-            # Fetch hierarchies for filtering (always, as filter requires it)
-            with st.spinner("Fetching taxonomic hierarchies for rank filtering..."):
-                for sp in st.session_state.species_data:
-                    _, _, ancestors = get_species_details(sp['name'], fetch_hierarchy=True)
-                    sp['hierarchy'] = ancestors
-            filtered_data = filter_species_by_rank(st.session_state.species_data, selected_rank, rank_name)
-            st.info(f"Filtered to {len(filtered_data)} species in {selected_rank}: {rank_name}")
-            if not include_hierarchy:
-                st.warning("Hierarchy fetched temporarily for rank filtering. It will be included in analysis/export unless disabled.")
+        
+        # Apply rank filter if enabled and configured
+        if (filter_enabled and 
+            'rank_filter_settings' in st.session_state and 
+            st.session_state.rank_filter_settings.get('value')):
+            
+            settings = st.session_state.rank_filter_settings
+            
+            # Use optimized filtering
+            filtered_data, total_checked = filter_species_by_rank_optimized(
+                st.session_state.species_data,
+                settings['rank'],
+                settings['value'],
+                settings['fuzzy_threshold']
+            )
+            
+            st.info(f"""
+            🎯 **Filter Applied:** {len(filtered_data)} species in {settings['rank']}: {settings['value']}
+            (Checked {total_checked} species with {settings['fuzzy_threshold']}% match sensitivity)
+            """)
         
         # Prepare species options for multiselect based on filtered data
         species_list_limited = filtered_data[:50]
