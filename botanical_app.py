@@ -62,7 +62,7 @@ INAT_LICENSE_MAP = {
     'pd': 'Public Domain'
 }
 
-ALLOWED_INAT_LICENSES = ['cc-by', 'cc-by-sa', 'cc0', 'pd']
+ALLOWED_INAT_LICENSES = ['cc-by', 'cc-by-sa', 'cc-by-nc', 'cc-by-nc-sa', 'cc-by-nc-nd', 'cc0', 'pd']
 
 # Initialize session state
 def init_session_state():
