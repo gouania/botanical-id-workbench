@@ -738,29 +738,29 @@ def main():
                     shutil.rmtree(cache_dir)
             st.success("Cache cleared!")
     
+    # Show search location map (always visible)
+    st.subheader("📍 Search Location")
+    preview_map = folium.Map(location=[latitude, longitude], zoom_start=10)
+    folium.Marker(
+        [latitude, longitude], 
+        popup="Search Center",
+        icon=folium.Icon(color='red', icon='info-sign')
+    ).add_to(preview_map)
+    folium.Circle(
+        location=[latitude, longitude],
+        radius=radius_km * 1000,
+        popup=f"Search radius: {radius_km} km",
+        color="#2d5016",
+        fill=True,
+        fillColor="#a4b494",
+        fillOpacity=0.2,
+        weight=2
+    ).add_to(preview_map)
+    st_folium(preview_map, height=400, width=700)
+
     # Main content area
     if st.session_state.species_data is None:
         st.info("👆 Configure search parameters in the sidebar and click 'Search GBIF' to begin")
-        
-        # Show example location on map
-        st.subheader("📍 Search Location Preview")
-        preview_map = folium.Map(location=[latitude, longitude], zoom_start=10)
-        folium.Marker(
-            [latitude, longitude], 
-            popup="Search Center",
-            icon=folium.Icon(color='red', icon='info-sign')
-        ).add_to(preview_map)
-        folium.Circle(
-            location=[latitude, longitude],
-            radius=radius_km * 1000,
-            popup=f"Search radius: {radius_km} km",
-            color="#2d5016",
-            fill=True,
-            fillColor="#a4b494",
-            fillOpacity=0.2,
-            weight=2
-        ).add_to(preview_map)
-        st_folium(preview_map, height=400, width=700)
         
     else:
         # Display search results
