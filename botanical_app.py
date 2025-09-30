@@ -1,68 +1,40 @@
+# botanical_workbench.py
 import streamlit as st
 import pandas as pd
+import folium
+from folium.plugins import MarkerCluster
+from streamlit_folium import st_folium
+import concurrent.futures
+from typing import Optional, List, Dict, Tuple
+import asyncio
+import aiohttp
+import json
+import os
+from datetime import datetime
 import pygbif.species as gbif_species
 import pygbif.occurrences as gbif_occ
 import math
 import time
-import os
-import requests 
-import zipfile   
-from typing import Optional, List, Dict, Tuple
-import json
-from datetime import datetime
-import warnings
-import logging
-from tenacity import retry, stop_after_attempt, wait_exponential
-from rapidfuzz import fuzz, process
 import joblib
-import functools
-import folium
-from streamlit_folium import st_folium
-from PIL import Image
-import io
-import urllib.parse
-import streamlit.components.v1 as components
-import shutil
+from rapidfuzz import fuzz, process
+import logging
 
-# Global headers for iNaturalist API requests
-INAT_HEADERS = {
-    'User-Agent': 'BotanicalWorkbench/1.0 (contact: daniel.cahen.substance@gmail.com)'
-}
+# Configure logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
-# Configure page with botanical theme
+# Constants
+DATA_DIR = "prepared_data"
+PROCESSED_DATA_FILE = os.path.join(DATA_DIR, "eflora_processed.parquet")
+VERSION_FILE = os.path.join(DATA_DIR, "data_version.json")
+MAX_CONCURRENT_REQUESTS = 10  # For parallel API calls
+
 st.set_page_config(
     page_title="Botanical ID Workbench: South Africa",
     page_icon="🌿",
     layout="wide",
     initial_sidebar_state="expanded"
 )
-
-# Load custom CSS from the external styles.css file
-st.html("styles.css")
-
-# Suppress warnings
-warnings.filterwarnings('ignore')
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
-
-# --- Constants for Data Loading ---
-EFLORA_ZIP_URL = "https://ipt.sanbi.org.za/archive.do?r=flora_descriptions&v=1.42"
-DATA_DIR = "data"
-REQUIRED_FILES = ["taxon.txt", "description.txt", "vernacularname.txt"]
-
-# iNaturalist license codes and their meanings
-INAT_LICENSE_MAP = {
-    'cc-by': 'CC BY 4.0',
-    'cc-by-sa': 'CC BY-SA 4.0',
-    'cc-by-nd': 'CC BY-ND 4.0',
-    'cc-by-nc': 'CC BY-NC 4.0',
-    'cc-by-nc-nd': 'CC BY-NC-ND 4.0',
-    'cc-by-nc-sa': 'CC BY-NC-SA 4.0',
-    'cc0': 'CC0 1.0',
-    'pd': 'Public Domain'
-}
-
-ALLOWED_INAT_LICENSES = ['cc-by', 'cc-by-sa', 'cc0', 'pd']
 
 # Initialize session state
 def init_session_state():
@@ -71,7 +43,10 @@ def init_session_state():
         'selected_species': {},
         'eflora_data': None,
         'analysis_data': None,
-        'all_records': None
+        'all_records': None,
+        'page': 'search',  # Track current page
+        'filter_settings': {},
+        'map_cluster': True
     }
     for key, value in defaults.items():
         if key not in st.session_state:
@@ -79,1212 +54,557 @@ def init_session_state():
 
 init_session_state()
 
-# Caching decorator
-def file_cache(cache_dir="cache"):
-    if not os.path.exists(cache_dir):
-        os.makedirs(cache_dir)
-    def decorator(func):
-        @functools.wraps(func)
-        def wrapper(*args, **kwargs):
-            # Create consistent cache key
-            if 'latitude' in kwargs:
-                kwargs['latitude'] = round(kwargs['latitude'], 2)
-            if 'longitude' in kwargs:
-                kwargs['longitude'] = round(kwargs['longitude'], 2)
-            arg_str = "_".join(map(str, args))
-            kwarg_str = "_".join(f"{k}_{v}" for k, v in sorted(kwargs.items()))
-            cache_key = f"{func.__name__}_{arg_str}_{kwarg_str}".replace('/', '_').replace('.', '_')
-            cache_file = os.path.join(cache_dir, f"{cache_key}.pkl")
-            
-            if os.path.exists(cache_file):
-                return joblib.load(cache_file)
-            
-            result = func(*args, **kwargs)
-            joblib.dump(result, cache_file)
-            return result
-        return wrapper
-    return decorator
-
-@st.cache_data(ttl=60*60*24*7) # Cache data for one week
-def load_eflora_data() -> Optional[pd.DataFrame]:
-    """
-    Ensures e-Flora data is available locally, downloading and extracting if necessary.
-    Then, it processes and merges the data into a single DataFrame.
-    The final DataFrame is cached for performance.
-    """
-    # 1. Ensure the local data directory exists
-    os.makedirs(DATA_DIR, exist_ok=True)
-
-    # 2. Check if all required files are already present
-    local_files_exist = all(os.path.exists(os.path.join(DATA_DIR, f)) for f in REQUIRED_FILES)
-
-    # 3. If files are missing, download and extract them
-    if not local_files_exist:
-        zip_path = os.path.join(DATA_DIR, "eflora_data.zip")
-        with st.spinner(f"Downloading e-Flora data from SANBI (~16MB)... This is a one-time setup."):
-            try:
-                # NEW: Define headers to mimic a browser
-                headers = {
-                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
-                }
-                
-                # Download the ZIP file
-                with requests.get(EFLORA_ZIP_URL, stream=True, headers=headers) as r:
-                    r.raise_for_status()
-                    with open(zip_path, 'wb') as f:
-                        for chunk in r.iter_content(chunk_size=8192):
-                            f.write(chunk)
-
-                # Extract the ZIP file
-                with zipfile.ZipFile(zip_path, 'r') as zip_ref:
-                    zip_ref.extractall(DATA_DIR)
-
-                # Clean up the downloaded ZIP file
-                os.remove(zip_path)
-                st.success("e-Flora data downloaded and prepared successfully!")
-
-            except Exception as e:
-                st.error(f"Failed to download or process e-Flora data: {e}")
-                # Clean up failed download if it exists
-                if os.path.exists(zip_path):
-                    os.remove(zip_path)
-                return None
-
-    # 4. Load, process, and merge the data (this part is your existing logic)
+@st.cache_data(ttl=3600*24)  # Cache for 24 hours
+def load_prepared_data() -> Optional[pd.DataFrame]:
+    """Load pre-processed e-Flora data."""
+    if not os.path.exists(PROCESSED_DATA_FILE):
+        st.error("""
+        ⚠️ **Data not found!**
+        
+        Please run the data preparation script first:
+        ```bash
+        python prepare_data.py
+        ```
+        """)
+        return None
+    
     try:
-        st.info("Loading e-Flora database from local files...")
+        data = pd.read_parquet(PROCESSED_DATA_FILE)
         
-        # Load the three main files (as before)
-        taxa_df = pd.read_csv(os.path.join(DATA_DIR, 'taxon.txt'), sep='\t', header=0, 
-                              usecols=['id', 'scientificName'], dtype={'id': str})
+        # Load version info
+        if os.path.exists(VERSION_FILE):
+            with open(VERSION_FILE, 'r') as f:
+                version_info = json.load(f)
+                st.sidebar.caption(f"📊 Data version: {version_info.get('version', 'Unknown')}")
+                st.sidebar.caption(f"📅 Processed: {version_info.get('processed_date', 'Unknown')[:10]}")
         
-        desc_df = pd.read_csv(os.path.join(DATA_DIR, 'description.txt'), sep='\t', header=0, 
-                              usecols=['id', 'description', 'type'], dtype={'id': str})
-        
-        vernacular_df = pd.read_csv(os.path.join(DATA_DIR, 'vernacularname.txt'), sep='\t', header=0, 
-                                    usecols=['id', 'vernacularName'], dtype={'id': str})
-        
-        # --- Your existing merging and processing logic (unchanged) ---
-        for df in [taxa_df, desc_df]:
-            df.rename(columns={'id': 'taxonID'}, inplace=True)
-        vernacular_df.rename(columns={'id': 'taxonID'}, inplace=True)
-        
-        taxa_df['cleanScientificName'] = taxa_df['scientificName'].apply(
+        # Set index for efficient lookups
+        data['cleanScientificName'] = data['scientificName'].apply(
             lambda x: ' '.join(str(x).split()[:2]) if pd.notna(x) else ''
         )
+        data.set_index('cleanScientificName', inplace=True)
+        data = data[~data.index.duplicated(keep='first')]
         
-        desc_agg = desc_df.groupby('taxonID').apply(
-            lambda x: x.set_index('type')['description'].to_dict()
-        ).reset_index(name='descriptions')
-        
-        vernacular_agg = vernacular_df.groupby('taxonID')['vernacularName'].apply(
-            lambda x: list(set(str(n).strip() for n in x.dropna() if pd.notna(n) and str(n).strip()))
-        ).reset_index()
-        
-        eflora_data = pd.merge(taxa_df, desc_agg, on='taxonID', how='left')
-        eflora_data = pd.merge(eflora_data, vernacular_agg, on='taxonID', how='left')
-        
-        eflora_data.set_index('cleanScientificName', inplace=True)
-        eflora_data = eflora_data[~eflora_data.index.duplicated(keep='first')]
-        eflora_data = eflora_data[eflora_data.index != '']
-        # --- End of your existing logic ---
-
-        st.success(f"Loaded {len(eflora_data)} taxa from e-Flora database.")
-        return eflora_data
-        
+        return data
     except Exception as e:
-        st.error(f"Failed to load e-Flora data from local files: {e}")
+        st.error(f"Failed to load data: {e}")
         return None
 
-def format_species_name(name):
-    if not name:
-        return None
-    parts = name.split()
-    return f"{parts[0]} {parts[1]}" if len(parts) >= 2 else name
-
-@st.cache_data
-@retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=1, max=10))
-def safe_gbif_backbone(name, kingdom='Plantae'):
-    """Cached and retried GBIF backbone lookup."""
-    return gbif_species.name_backbone(name=name, kingdom=kingdom, verbose=False)
-
-@st.cache_data
-def get_species_details(species_name: str, limit: int = 5, fetch_hierarchy: bool = True) -> Tuple[List[Dict], Optional[int], List[Dict]]:
-    """
-    Fetch iNat photos + taxonomic hierarchy.
-    Returns: (photos, taxon_id, ancestors)
-    """
+# Async function for parallel iNaturalist API calls
+async def fetch_species_details_async(session, species_name: str, limit: int = 5):
+    """Async version of species details fetching."""
+    headers = {'User-Agent': 'BotanicalWorkbench/1.0'}
+    
     try:
-        encoded_name = urllib.parse.quote(species_name)
-        search_url = f"https://api.inaturalist.org/v1/taxa/autocomplete?q={encoded_name}&per_page=1"
-        response = requests.get(search_url, headers=INAT_HEADERS, timeout=10)
-        
-        if response.status_code != 200:
-            logger.warning(f"API error for taxon search ({response.status_code}): {response.text[:200]}")
-            return [], None, []
+        # Search for taxon
+        search_url = f"https://api.inaturalist.org/v1/taxa/autocomplete?q={species_name}&per_page=1"
+        async with session.get(search_url, headers=headers) as response:
+            if response.status != 200:
+                return species_name, [], None, []
             
-        data = response.json()
-        
-        if not data.get('results'):
-            return [], None, []
+            data = await response.json()
+            if not data.get('results'):
+                return species_name, [], None, []
             
-        taxon = data['results'][0]
-        if taxon.get('rank') != 'species':
-            for result in data.get('results', []):
-                if result.get('rank') == 'species':
-                    taxon = result
-                    break
-        
-        taxon_id = taxon['id']
-        photos = []
-        
-        # Existing default_photo logic (unchanged)
-        default_photo = taxon.get('default_photo')
-        if default_photo:
-            photo_url = default_photo.get('medium_url') or default_photo.get('square_url')
-            if photo_url:
-                attribution = default_photo.get('attribution', '(c) Unknown photographer')
-                photographer = attribution.split('(c)')[-1].split(',')[0].strip() if '(c)' in attribution else 'Unknown photographer'
-                
-                license_code = default_photo.get('license_code', '')
-                if license_code in ALLOWED_INAT_LICENSES:
-                    license_name = INAT_LICENSE_MAP.get(license_code, 'Unknown')
-                    photos.append({
-                        'url': photo_url,
-                        'photographer': photographer,
-                        'license': license_name,
-                        'caption': f"© {photographer} · {license_name}"
-                    })
-        
-        # Existing observations logic (unchanged)
-        obs_url = f"https://api.inaturalist.org/v1/observations?taxon_id={taxon_id}&photos=true&per_page={limit}&order_by=votes&order=desc"
-        obs_response = requests.get(obs_url, headers=INAT_HEADERS, timeout=10)
-        
-        if obs_response.status_code != 200:
-            logger.warning(f"API error for observations ({obs_response.status_code}): {obs_response.text[:200]}")
-        
-        obs_data = obs_response.json()
-        
-        for obs in obs_data.get('results', [])[:limit]:
-            obs_user = obs.get('user', {})
-            photographer_name = obs_user.get('name') or obs_user.get('login', 'Unknown')
+            taxon = data['results'][0]
+            taxon_id = taxon['id']
             
-            for photo in obs.get('photos', [])[:1]:
-                photo_url = photo.get('url', '').replace('square', 'medium')
-                if not photo_url:
-                    photo_url = photo.get('medium_url') or photo.get('square_url')
-                
-                if photo_url and photo_url not in [p['url'] for p in photos]:
-                    photo_attribution = photo.get('attribution', '')
-                    photo_photographer = photo_attribution.split('(c)')[-1].split(',')[0].strip() if '(c)' in photo_attribution else photographer_name
-                    
-                    license_code = photo.get('license_code', '')
-                    if license_code in ALLOWED_INAT_LICENSES:
-                        license_name = INAT_LICENSE_MAP.get(license_code, 'Unknown')
-                        
-                        photos.append({
-                            'url': photo_url,
-                            'photographer': photo_photographer,
-                            'license': license_name,
-                            'caption': f"© {photo_photographer} · {license_name}"
-                        })
-                
-                if len(photos) >= limit:
-                    break
+            # Fetch photos and hierarchy in parallel
+            photos_task = fetch_photos_async(session, taxon_id, taxon, limit)
+            hierarchy_task = fetch_hierarchy_async(session, taxon_id)
             
-            if len(photos) >= limit:
-                break
-        
-        # Fetch ancestors only if requested
-        ancestors = []
-        if fetch_hierarchy:
-            taxon_url = f"https://api.inaturalist.org/v1/taxa/{taxon_id}"
-            taxon_response = requests.get(taxon_url, headers=INAT_HEADERS, timeout=10)
-            if taxon_response.status_code == 200:
-                taxon_data = taxon_response.json().get('results', [{}])[0]
-                raw_ancestors = taxon_data.get('ancestors', [])
-                ancestors = sorted(
-                    [anc for anc in raw_ancestors if anc.get('rank')],
-                    key=lambda x: x.get('rank_level', 0), reverse=True  # Kingdom first
-                )
-                ancestors = [{'rank': anc['rank'], 'name': anc['name'], 'id': anc.get('id')} for anc in ancestors]  # Include ID for links
-        
-        return photos, taxon_id, ancestors
-        
+            photos, hierarchy = await asyncio.gather(photos_task, hierarchy_task)
+            
+            return species_name, photos, taxon_id, hierarchy
+            
     except Exception as e:
-        logger.error(f"Error fetching iNat details for {species_name}: {e}")
-        return [], None, []
+        logger.error(f"Error fetching details for {species_name}: {e}")
+        return species_name, [], None, []
 
-def filter_species_by_rank(species_data: List[Dict], rank: str, name: str) -> List[Dict]:
-    """Filter species where hierarchy has matching rank and name (case-insensitive)."""
-    return [sp for sp in species_data if any(
-        anc['rank'] == rank and anc['name'].lower() == name.lower()
-        for anc in sp.get('hierarchy', [])
-    )]
-
-@file_cache(cache_dir="gbif_cache")
-def get_species_list_from_gbif(latitude, longitude, radius_km, taxon_name, record_limit=50000):
-    """Queries GBIF with caching."""
+async def fetch_photos_async(session, taxon_id, taxon, limit):
+    """Fetch photos asynchronously."""
+    photos = []
+    headers = {'User-Agent': 'BotanicalWorkbench/1.0'}
+    
+    # Process default photo
+    default_photo = taxon.get('default_photo')
+    if default_photo:
+        photo_url = default_photo.get('medium_url') or default_photo.get('square_url')
+        if photo_url:
+            photos.append({
+                'url': photo_url,
+                'photographer': 'iNaturalist',
+                'license': default_photo.get('license_code', 'Unknown')
+            })
+    
+    # Fetch observations
+    obs_url = f"https://api.inaturalist.org/v1/observations?taxon_id={taxon_id}&photos=true&per_page={limit}"
     try:
-        # Backbone match
-        taxon_info = safe_gbif_backbone(taxon_name)
-        if 'usageKey' not in taxon_info or taxon_info.get('matchType') == 'NONE':
-            st.error(f"Taxon '{taxon_name}' not found in GBIF")
-            return [], []
-        
-        search_taxon_key = taxon_info['usageKey']
-        status = taxon_info.get('status', 'unknown').upper()
-        synonym = taxon_info.get('synonym', False)
-        status_flag = f" ({status}{' - Synonym' if synonym else ''})" if status != 'ACCEPTED' else ""
-
-        # Bounding box
-        lat_offset = radius_km / 111.32
-        lon_offset = radius_km / (111.32 * abs(math.cos(math.radians(latitude))))
-        params = {
-            'taxonKey': search_taxon_key,
-            'decimalLatitude': f'{latitude - lat_offset},{latitude + lat_offset}',
-            'decimalLongitude': f'{longitude - lon_offset},{longitude + lon_offset}',
-            'hasCoordinate': True,
-            'hasGeospatialIssue': False,
-            'limit': 300
-        }
-
-        all_records = []
-        offset = 0
-        progress_bar = st.progress(0)
-        status_text = st.empty()
-        
-        while offset < record_limit:
-            params['offset'] = offset
-            try:
-                response = gbif_occ.search(**params)
-                batch = response.get('results', [])
-                if not batch:
-                    break
-                all_records.extend(batch)
-                
-                progress = min(len(all_records) / min(record_limit, 10000), 1.0)
-                progress_bar.progress(progress)
-                status_text.text(f"Fetched {len(all_records)} records...")
-                
-                if len(batch) < 300:
-                    break
-                offset += len(batch)
-                time.sleep(0.05)
-                
-                if len(all_records) >= 100000:
-                    st.warning("Search truncated at 100,000 records for performance.")
-                    break
-            except Exception as e:
-                st.error(f"Error fetching batch: {e}")
-                break
-
-        progress_bar.empty()
-        status_text.empty()
-
-        # Aggregate unique species
-        species_dict = {}
-        for record in all_records:
-            species_name = record.get('species')
-            species_key = record.get('speciesKey')
-            if species_name and species_key:
-                if species_name not in species_dict:
-                    species_dict[species_name] = {
-                        'name': species_name, 'count': 0, 'family': record.get('family', 'Unknown'),
-                        'taxon_key': species_key, 'status_flag': status_flag, 'records': []
-                    }
-                species_dict[species_name]['count'] += 1
-                species_dict[species_name]['records'].append(record)
-        
-        species_list = sorted(species_dict.values(), key=lambda x: x['count'], reverse=True)
-        return species_list, all_records
-        
-    except Exception as e:
-        st.error(f"GBIF search failed: {e}")
-        return [], []
-
-def get_local_eflora_description(scientific_name, eflora_data):
-    """Get description from local e-Flora data with fuzzy matching."""
-    if eflora_data is None:
-        return False, "e-Flora data not available"
-    
-    clean_name = format_species_name(scientific_name)
-    
-    # Try exact match first
-    if clean_name in eflora_data.index:
-        matched_name = clean_name
-    else:
-        # Try fuzzy matching
-        matches = process.extractOne(clean_name, eflora_data.index, scorer=fuzz.token_sort_ratio)
-        if matches and matches[1] >= 90:  # 90% similarity threshold
-            matched_name = matches[0]
-        else:
-            return False, f"Species {clean_name} not found in local database"
-    
-    try:
-        # Retrieve the matched row
-        row = eflora_data.loc[matched_name]
-        descriptions = row['descriptions']
-        vernacular_raw = row['vernacularName']
-        full_scientific_name = row['scientificName']
-        
-        # Handle vernacular names safely
-        if isinstance(vernacular_raw, list):
-            vernacular_names = [str(n).strip() for n in vernacular_raw if pd.notna(n) and str(n).strip()]
-        elif isinstance(vernacular_raw, str):
-            vernacular_names = [vernacular_raw.strip()] if vernacular_raw.strip() else []
-        else:
-            vernacular_names = []
-        
-        # Check if descriptions is a valid dictionary
-        if not isinstance(descriptions, dict) or not descriptions:
-            return False, f"No description available for {clean_name}"
-
-        # Build description with priority sections
-        extracted_data = [f"**Scientific Name:** {full_scientific_name}"]
-        
-        if vernacular_names:
-            extracted_data.append(f"**Common Names:** {', '.join(vernacular_names[:5])}")
-
-        # Priority sections in order of importance
-        priority_sections = [
-            "Morphological description", 
-            "Diagnostic characters", 
-            "Habitat", 
-            "Distribution",
-            "Morphology",
-            "Diagnostic",
-            "Description",
-            "Characters"
-        ]
-        
-        sections_added = 0
-        for section in priority_sections:
-            if section in descriptions and pd.notna(descriptions[section]):
-                desc_text = str(descriptions[section]).strip()
-                if desc_text and len(desc_text) > 10:
-                    extracted_data.append(f"**{section}:**\n{desc_text}")
-                    sections_added += 1
-                    if sections_added >= 4:
-                        break
-        
-        # If no priority sections found, add any available sections
-        if sections_added == 0:
-            for section, desc in descriptions.items():
-                if pd.notna(desc):
-                    desc_text = str(desc).strip()
-                    if desc_text and len(desc_text) > 10:
-                        extracted_data.append(f"**{section}:**\n{desc_text}")
-                        sections_added += 1
-                        if sections_added >= 2:
+        async with session.get(obs_url, headers=headers) as response:
+            if response.status == 200:
+                obs_data = await response.json()
+                for obs in obs_data.get('results', [])[:limit]:
+                    for photo in obs.get('photos', [])[:1]:
+                        photo_url = photo.get('url', '').replace('square', 'medium')
+                        if photo_url and photo_url not in [p['url'] for p in photos]:
+                            photos.append({
+                                'url': photo_url,
+                                'photographer': obs.get('user', {}).get('login', 'Unknown'),
+                                'license': photo.get('license_code', 'Unknown')
+                            })
+                        if len(photos) >= limit:
                             break
-        
-        if sections_added == 0:
-            return False, f"No detailed descriptions available for {clean_name}"
-
-        # Add e-Flora citation
-        extracted_data.append(
-            "\n**Citation:** e-Flora of South Africa. v1.42. 2023. South African National Biodiversity Institute. http://ipt.sanbi.org.za/iptsanbi/resource?r=flora_descriptions&v=1.42"
-        )
-        extracted_data.append(
-            "**License:** CC-BY 4.0"
-        )
-            
-        return True, "\n\n".join(extracted_data)
-        
     except Exception as e:
-        st.error(f"Error processing {clean_name}: {e}")
-        return False, f"Error retrieving data for {clean_name}"
+        logger.error(f"Error fetching photos: {e}")
+    
+    return photos
 
-def create_species_map(records, species_list, center_lat, center_lon):
-    """Create an interactive map with species observations."""
-    # Create base map
+async def fetch_hierarchy_async(session, taxon_id):
+    """Fetch taxonomic hierarchy asynchronously."""
+    headers = {'User-Agent': 'BotanicalWorkbench/1.0'}
+    
+    try:
+        taxon_url = f"https://api.inaturalist.org/v1/taxa/{taxon_id}"
+        async with session.get(taxon_url, headers=headers) as response:
+            if response.status == 200:
+                data = await response.json()
+                ancestors = data.get('results', [{}])[0].get('ancestors', [])
+                return [{'rank': a['rank'], 'name': a['name'], 'id': a.get('id')} 
+                       for a in ancestors if a.get('rank')]
+    except Exception as e:
+        logger.error(f"Error fetching hierarchy: {e}")
+    
+    return []
+
+def fetch_all_species_details_parallel(species_list: List[str], limit: int = 5) -> Dict:
+    """Fetch details for multiple species in parallel."""
+    async def fetch_all():
+        async with aiohttp.ClientSession() as session:
+            tasks = [fetch_species_details_async(session, sp, limit) for sp in species_list]
+            results = await asyncio.gather(*tasks)
+            return {name: {'photos': photos, 'taxon_id': tid, 'hierarchy': hier} 
+                   for name, photos, tid, hier in results}
+    
+    # Run async function
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+    try:
+        return loop.run_until_complete(fetch_all())
+    finally:
+        loop.close()
+
+def create_clustered_map(records, species_list, center_lat, center_lon, use_clustering=True):
+    """Create map with optional clustering."""
     m = folium.Map(
-        location=[center_lat, center_lon], 
+        location=[center_lat, center_lon],
         zoom_start=10,
         tiles='OpenStreetMap'
     )
     
-    # Add center point
+    # Add center marker
     folium.Marker(
         [center_lat, center_lon],
         popup="Search Center",
         icon=folium.Icon(color='red', icon='info-sign')
     ).add_to(m)
     
-    # Professional color palette
-    colors = ['#2d5016', '#4a7c24', '#6b8e23', '#8fbc8f', '#556b2f', 
-              '#697565', '#8b7355', '#6b4423', '#7c5e4c', '#a0826d']
-    
-    # Add species points
-    for i, species in enumerate(species_list[:10]):
-        color = colors[i % len(colors)]
-        species_records = [r for r in records if r.get('species') == species['name']]
+    if use_clustering:
+        # Use marker clustering for better performance
+        marker_cluster = MarkerCluster().add_to(m)
         
-        for record in species_records[:50]:
-            lat = record.get('decimalLatitude')
-            lon = record.get('decimalLongitude')
-            if lat and lon:
-                folium.CircleMarker(
-                    location=[lat, lon],
-                    radius=4,
-                    popup=f"<b>{species['name']}</b><br>Family: {species['family']}<br>Date: {record.get('eventDate', 'Unknown')}",
-                    color=color,
-                    fill=True,
-                    fillColor=color,
-                    weight=2,
-                    opacity=0.8,
-                    fillOpacity=0.6
-                ).add_to(m)
-    
-    # Create legend
-    legend_html = '''
-    <div style="position: fixed; 
-                bottom: 60px; 
-                left: 50px; 
-                width: 280px; 
-                background-color: rgba(255, 255, 255, 0.98); 
-                border: 1px solid #d0d0d0; 
-                border-radius: 4px;
-                z-index: 9999; 
-                font-size: 12px; 
-                padding: 12px;
-                box-shadow: 0 2px 6px rgba(0,0,0,0.1);
-                font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;">
-    <div style="color: #1a3d07; font-weight: 600; font-size: 13px; margin-bottom: 8px; border-bottom: 1px solid #e0e0e0; padding-bottom: 6px;">
-        Species Legend
-    </div>
-    '''
-    
-    for i, species in enumerate(species_list[:10]):
-        color = colors[i % len(colors)]
-        display_name = species['name'] if len(species['name']) <= 25 else species['name'][:22] + '...'
-        legend_html += f'''
-        <div style="margin: 4px 0; display: flex; align-items: center;">
-            <div style="background: {color}; 
-                        width: 14px; 
-                        height: 14px; 
-                        border-radius: 50%; 
-                        display: inline-block; 
-                        margin-right: 8px; 
-                        border: 1px solid #333;
-                        flex-shrink: 0;">
-            </div>
-            <span style="color: #1a1a1a; font-size: 11px; line-height: 1.3;">{display_name}</span>
-        </div>
-        '''
-    
-    legend_html += '</div>'
-    
-    m.get_root().html.add_child(folium.Element(legend_html))
+        colors = ['green', 'blue', 'purple', 'orange', 'darkred', 
+                 'lightred', 'darkblue', 'darkgreen', 'cadetblue', 'darkpurple']
+        
+        for i, species in enumerate(species_list[:20]):  # Limit for performance
+            color = colors[i % len(colors)]
+            species_records = [r for r in records if r.get('species') == species['name']]
+            
+            for record in species_records[:100]:  # Limit records per species
+                lat = record.get('decimalLatitude')
+                lon = record.get('decimalLongitude')
+                if lat and lon:
+                    folium.Marker(
+                        location=[lat, lon],
+                        popup=f"<b>{species['name']}</b><br>Family: {species['family']}",
+                        icon=folium.Icon(color=color, icon='leaf')
+                    ).add_to(marker_cluster)
+    else:
+        # Original non-clustered approach (simplified)
+        colors = ['#2d5016', '#4a7c24', '#6b8e23']
+        for i, species in enumerate(species_list[:5]):
+            color = colors[i % len(colors)]
+            species_records = [r for r in records if r.get('species') == species['name']]
+            
+            for record in species_records[:20]:
+                lat = record.get('decimalLatitude')
+                lon = record.get('decimalLongitude')
+                if lat and lon:
+                    folium.CircleMarker(
+                        location=[lat, lon],
+                        radius=4,
+                        popup=f"{species['name']}",
+                        color=color,
+                        fill=True,
+                        fillColor=color
+                    ).add_to(m)
     
     return m
 
-def add_footer():
-    """Adds a professional footer with creator information."""
-    st.markdown(f"""
-    <div class="footer">
-        Created by Daniel Cahen | © {datetime.now().year} | MIT License | 
-        <a href="https://github.com" target="_blank">GitHub</a>
-    </div>
-    """, unsafe_allow_html=True)
-
-def create_copy_button(copy_text, label):
-    """Create a copy button component for export previews."""
-    escaped_text = copy_text.replace('\\', '\\\\').replace('`', '\\`')
-    components.html(f"""
-    <div style="display: flex; justify-content: space-between; align-items: center; width: 100%; padding-bottom: 10px; margin-bottom: 10px; border-bottom: 1px solid var(--border-color);">
-        <span style="font-weight: 500;">Preview {label}</span>
-        <button id="copyBtn" style="background-color: #2d5016; color: white; border: none; padding: 8px 16px; border-radius: 4px; cursor: pointer; font-size: 14px;">Copy {label}</button>
-    </div>
-    <script>
-    document.getElementById('copyBtn').addEventListener('click', function() {{
-        navigator.clipboard.writeText(`{escaped_text}`).then(() => {{
-            alert('Copied to clipboard!');
-        }});
-    }});
-    </script>
-    """, height=80)
-
-# Add these new functions after your existing utility functions
-
-@st.cache_data(ttl=3600)
-def get_cached_hierarchy(species_name: str) -> List[Dict]:
-    """Cache hierarchy lookups to avoid repeated API calls."""
-    _, _, ancestors = get_species_details(species_name, fetch_hierarchy=True)
-    return ancestors
-
-def get_available_ranks_and_values(species_data: List[Dict], sample_size: int = 20) -> Dict[str, set]:
-    """
-    Sample species to discover available taxonomic ranks and their values.
-    Returns a dict like: {'genus': {'Protea', 'Leucadendron', ...}, 'tribe': {'Proteae', ...}}
-    """
-    ranks_values = {}
+# Navigation functions
+def show_search_page():
+    """Main search interface."""
+    st.title("🌿 Botanical ID Workbench")
     
-    # Sample a subset to avoid fetching hierarchy for all species
-    sample = species_data[:min(sample_size, len(species_data))]
+    # Load e-Flora data
+    if st.session_state.eflora_data is None:
+        st.session_state.eflora_data = load_prepared_data()
+        if st.session_state.eflora_data is None:
+            return
     
-    with st.spinner(f"Discovering taxonomic structure (sampling {len(sample)} species)..."):
-        for sp in sample:
-            hierarchy = get_cached_hierarchy(sp['name'])
-            for anc in hierarchy:
-                rank = anc.get('rank')
-                name = anc.get('name')
-                if rank and name:
-                    if rank not in ranks_values:
-                        ranks_values[rank] = set()
-                    ranks_values[rank].add(name)
+    # Create two columns for search interface
+    col1, col2 = st.columns([1, 2])
     
-    return ranks_values
-
-def filter_species_by_rank_optimized(
-    species_data: List[Dict], 
-    rank: str, 
-    name: str, 
-    fuzzy_threshold: int = 85
-) -> Tuple[List[Dict], int]:
-    """
-    Optimized filtering with fuzzy matching and progress tracking.
-    Returns (filtered_species, total_checked)
-    """
-    filtered = []
-    checked = 0
-    
-    # Create a progress container
-    progress_container = st.container()
-    with progress_container:
-        progress_bar = st.progress(0)
-        status_text = st.empty()
-    
-    for i, sp in enumerate(species_data):
-        # Update progress
-        progress = (i + 1) / len(species_data)
-        progress_bar.progress(progress)
-        status_text.text(f"Checking species {i+1}/{len(species_data)}... Found {len(filtered)} matches")
+    with col1:
+        st.subheader("📍 Search Parameters")
         
-        # Get hierarchy (cached)
-        hierarchy = get_cached_hierarchy(sp['name'])
-        
-        # Check for match
-        match_found = False
-        for anc in hierarchy:
-            if anc.get('rank') == rank:
-                # Try exact match first
-                if anc.get('name', '').lower() == name.lower():
-                    match_found = True
-                    break
-                # Try fuzzy match
-                elif fuzzy_threshold > 0:
-                    score = fuzz.ratio(anc.get('name', '').lower(), name.lower())
-                    if score >= fuzzy_threshold:
-                        match_found = True
-                        break
-        
-        if match_found:
-            sp_copy = sp.copy()
-            sp_copy['hierarchy'] = hierarchy  # Store for later use
-            filtered.append(sp_copy)
-        
-        checked += 1
-    
-    # Clear progress indicators
-    progress_bar.empty()
-    status_text.empty()
-    
-    return filtered, checked
-
-# Enhanced sidebar implementation (replace the existing filter section)
-def render_enhanced_rank_filter(st_container):
-    """Render enhanced rank filter in the given container."""
-    
-    st_container.subheader("🔍 Advanced Taxonomic Filter")
-    
-    # Initialize filter state
-    if 'rank_filter_enabled' not in st.session_state:
-        st.session_state.rank_filter_enabled = False
-    if 'discovered_ranks' not in st.session_state:
-        st.session_state.discovered_ranks = None
-    
-    # Enable/disable filter
-    filter_enabled = st_container.checkbox(
-        "Enable Rank Filter", 
-        value=st.session_state.rank_filter_enabled,
-        help="Filter species by taxonomic rank (e.g., all species in a specific genus)"
-    )
-    st.session_state.rank_filter_enabled = filter_enabled
-    
-    if filter_enabled and st.session_state.species_data:
-        # Discover available ranks if not already done
-        if st.session_state.discovered_ranks is None:
-            if st_container.button("🔎 Discover Available Ranks", use_container_width=True):
-                ranks_values = get_available_ranks_and_values(st.session_state.species_data)
-                st.session_state.discovered_ranks = ranks_values
-                st.rerun()
-        
-        if st.session_state.discovered_ranks:
-            # Sort ranks by taxonomic level (approximate)
-            rank_order = ['kingdom', 'phylum', 'class', 'order', 'family', 
-                         'subfamily', 'tribe', 'subtribe', 'genus', 'subgenus', 
-                         'section', 'species_group', 'species']
-            available_ranks = list(st.session_state.discovered_ranks.keys())
-            sorted_ranks = [r for r in rank_order if r in available_ranks]
-            sorted_ranks.extend([r for r in available_ranks if r not in rank_order])
-            
-            # Rank selection
-            selected_rank = st_container.selectbox(
-                "Select Taxonomic Rank",
-                sorted_ranks,
-                help="Choose the taxonomic level to filter by"
-            )
-            
-            # Value selection for the rank
-            if selected_rank:
-                available_values = sorted(list(st.session_state.discovered_ranks[selected_rank]))
-                
-                # Provide both dropdown and text input
-                col1, col2 = st_container.columns([3, 1])
-                
-                with col1:
-                    # Dropdown for known values
-                    selected_value = st.selectbox(
-                        f"Select {selected_rank.title()}",
-                        [""] + available_values,
-                        help=f"Choose from discovered {selected_rank} values"
-                    )
-                
-                with col2:
-                    # Custom input option
-                    custom_value = st.text_input(
-                        "Or type custom",
-                        help="Enter a custom value"
-                    )
-                
-                # Use custom value if provided, otherwise use dropdown
-                final_value = custom_value if custom_value else selected_value
-                
-                if final_value:
-                    # Fuzzy matching threshold
-                    fuzzy_threshold = st_container.slider(
-                        "Match Sensitivity",
-                        0, 100, 85,
-                        help="Lower = more lenient matching (0 = exact match only)"
-                    )
-                    
-                    # Preview button
-                    if st_container.button("🔍 Preview Filter", use_container_width=True):
-                        with st.spinner("Calculating filter preview..."):
-                            # Quick check on a sample
-                            sample_size = min(10, len(st.session_state.species_data))
-                            sample_matches = 0
-                            
-                            for sp in st.session_state.species_data[:sample_size]:
-                                hierarchy = get_cached_hierarchy(sp['name'])
-                                for anc in hierarchy:
-                                    if anc.get('rank') == selected_rank:
-                                        if fuzzy_threshold == 0:
-                                            if anc.get('name', '').lower() == final_value.lower():
-                                                sample_matches += 1
-                                                break
-                                        else:
-                                            score = fuzz.ratio(anc.get('name', '').lower(), final_value.lower())
-                                            if score >= fuzzy_threshold:
-                                                sample_matches += 1
-                                                break
-                            
-                            estimated_matches = int((sample_matches / sample_size) * len(st.session_state.species_data))
-                            st_container.info(f"Estimated matches: ~{estimated_matches} species")
-                    
-                    # Store filter settings
-                    st.session_state.rank_filter_settings = {
-                        'rank': selected_rank,
-                        'value': final_value,
-                        'fuzzy_threshold': fuzzy_threshold
-                    }
-                else:
-                    st_container.warning(f"Please select or enter a {selected_rank} to filter by")
-        else:
-            st_container.info("Click 'Discover Available Ranks' to explore filter options")
-    
-    return filter_enabled
-
-# Main Streamlit App
-def main():
-    st.title("🌿 Botanical ID Workbench: South Africa")
-    st.markdown("*Advanced species identification using GBIF data and local flora databases*")
-    
-    # Sidebar for parameters
-    with st.sidebar:
-        st.header("🔧 Search Parameters")
-        
-        # Location settings
-        st.subheader("📍 Location")
-        
-        # Use session state to store the actual coordinates being used
-        if 'current_latitude' not in st.session_state:
-            st.session_state.current_latitude = -33.92
-        if 'current_longitude' not in st.session_state:
-            st.session_state.current_longitude = 18.42
-            
-        # 1. New field for pasting coordinates
-        coord_paste = st.text_input(
-            "Paste Coordinates (Lat, Lon)", 
-            value=f"{st.session_state.current_latitude}, {st.session_state.current_longitude}",
-            help="Paste a single string like '-26.8974527778, 27.476825' here."
+        # Coordinate input
+        coord_input = st.text_area(
+            "Enter Coordinates",
+            value="-33.92, 18.42",
+            height=60,
+            help="Enter as 'latitude, longitude' or paste from clipboard"
         )
         
-        # 2. Button to trigger parsing
-        if st.button("Apply Coordinates", key="apply_coords", use_container_width=True):
-            try:
-                # Attempt to parse the pasted string
-                lat_str, lon_str = coord_paste.split(',')
-                new_lat = float(lat_str.strip())
-                new_lon = float(lon_str.strip())
-                
-                # Update session state
-                st.session_state.current_latitude = new_lat
-                st.session_state.current_longitude = new_lon
-                st.success(f"Coordinates updated to: {new_lat}, {new_lon}")
-                # Rerun to update the map and search inputs immediately
-                st.rerun() 
-                
-            except ValueError:
-                st.error("Invalid coordinate format. Please use 'Latitude, Longitude' (e.g., -26.89, 27.47).")
-            except Exception as e:
-                st.error(f"An unexpected error occurred: {e}")
-
-        # 3. Use the session state values for the rest of the app
-        latitude = st.session_state.current_latitude
-        longitude = st.session_state.current_longitude
+        try:
+            lat_str, lon_str = coord_input.strip().split(',')
+            latitude = float(lat_str.strip())
+            longitude = float(lon_str.strip())
+            st.success(f"✓ Valid coordinates: {latitude:.4f}, {longitude:.4f}")
+        except:
+            st.error("Invalid format. Use: latitude, longitude")
+            latitude, longitude = -33.92, 18.42
         
-        # Display the actual values being used (optional, but good for confirmation)
-        st.markdown(f"**Current Lat:** `{latitude:.6f}`")
-        st.markdown(f"**Current Lon:** `{longitude:.6f}`")
+        radius_km = st.slider("Search Radius (km)", 1, 100, 25)
         
-        radius_km = st.slider("Search Radius (km)", 1, 200, 25,
-                              help="Radius around center point to search")
-        
-        # Search parameters  
-        st.subheader("🌱 Taxon Search")
         taxon_name = st.text_input("Taxon Name", value="Protea",
-                                   help="Scientific name of taxon to search (genus or higher)")
+                                   help="Genus or higher taxon to search")
         
-        # Enhanced rank filter
-        filter_enabled = render_enhanced_rank_filter(st.sidebar)
-        
-        # Options
-        st.subheader("⚙️ Options")
-        include_images = st.checkbox("Include Images", value=True,
-                                     help="Fetch images from iNaturalist (slower but more informative)")
-        include_hierarchy = st.checkbox("Include Taxonomic Hierarchy", value=True,
-                                        help="Fetch hierarchy from iNaturalist (adds context but slower)")
-        export_format = st.radio(
-            "Export Format", 
-            ["JSON", "Markdown"], # Set JSON as the default (first in list)
-            horizontal=True,
-            help="Format for downloading results (JSON is best for LLM analysis)"
-        )
-        
-        # Actions
+        # Search button
         if st.button("🔍 Search GBIF", type="primary", use_container_width=True):
-            with st.spinner("Searching GBIF database..."):
-                # Load e-Flora data if not already loaded
-                if st.session_state.eflora_data is None:
-                    st.session_state.eflora_data = load_eflora_data()
-                
-                if st.session_state.eflora_data is not None:
-                    species_data, all_records = get_species_list_from_gbif(
-                        latitude, longitude, radius_km, taxon_name
-                    )
-                    st.session_state.species_data = species_data
-                    st.session_state.all_records = all_records
-                    st.session_state.selected_species = {}
-                    if 'species_selector' in st.session_state:
-                        del st.session_state.species_selector
-                    if 'analysis_data' in st.session_state:
-                        del st.session_state.analysis_data
-                    st.rerun()
-                else:
-                    st.error("Cannot proceed without e-Flora data. Please check your data files.")
-        
-        # Data diagnostics section
-        with st.expander("🔧 Data Diagnostics"):
-            if st.button("Test e-Flora Data", use_container_width=True):
-                eflora_data = load_eflora_data()
-                if eflora_data is not None:
-                    st.success(f"Successfully loaded {len(eflora_data)} taxa")
-                    
-                    # Show sample data
-                    st.subheader("Sample Taxa (first 5):")
-                    sample_df = pd.DataFrame({
-                        'Scientific Name': eflora_data['scientificName'].head(),
-                        'Has Descriptions': [bool(desc) for desc in eflora_data['descriptions'].head()],
-                        'Vernacular Names': [len(vn) if isinstance(vn, list) else 0 for vn in eflora_data['vernacularName'].head()]
-                    })
-                    st.dataframe(sample_df)
-                else:
-                    st.error("Failed to load e-Flora data")
-            
-            st.markdown("**Required Files:**")
-            st.markdown("""
-            - `data/taxon.txt` - columns: 'id', 'scientificName'
-            - `data/description.txt` - columns: 'id', 'description', 'type'
-            - `data/vernacularname.txt` - columns: 'id', 'vernacularName'
-            """)
-        
-        if st.button("🗑️ Clear Cache", use_container_width=True):
-            for cache_dir in ['gbif_cache']:
-                if os.path.exists(cache_dir):
-                    shutil.rmtree(cache_dir)
-            st.success("Cache cleared!")
+            with st.spinner("Searching GBIF..."):
+                species_data, all_records = search_gbif_cached(
+                    latitude, longitude, radius_km, taxon_name
+                )
+                st.session_state.species_data = species_data
+                st.session_state.all_records = all_records
+                st.rerun()
     
-    # Show search location map (always visible)
-    st.subheader("📍 Search Location")
-    preview_map = folium.Map(location=[latitude, longitude], zoom_start=10)
-    folium.Marker(
-        [latitude, longitude], 
-        popup="Search Center",
-        icon=folium.Icon(color='red', icon='info-sign')
-    ).add_to(preview_map)
-    folium.Circle(
-        location=[latitude, longitude],
-        radius=radius_km * 1000,
-        popup=f"Search radius: {radius_km} km",
-        color="#2d5016",
-        fill=True,
-        fillColor="#a4b494",
-        fillOpacity=0.2,
-        weight=2
-    ).add_to(preview_map)
-    st_folium(preview_map, height=400, width=700)
+    with col2:
+        st.subheader("📍 Search Area Preview")
+        preview_map = folium.Map(location=[latitude, longitude], zoom_start=10)
+        folium.Marker([latitude, longitude], 
+                     popup="Search Center",
+                     icon=folium.Icon(color='red')).add_to(preview_map)
+        folium.Circle(
+            location=[latitude, longitude],
+            radius=radius_km * 1000,
+            color="#2d5016",
+            fill=True,
+            fillOpacity=0.2
+        ).add_to(preview_map)
+        st_folium(preview_map, height=400)
+    
+    # Results section
+    if st.session_state.species_data:
+        st.divider()
+        show_results_section()
 
-    # Main content area
-    if st.session_state.species_data is None:
-        st.info("👆 Configure search parameters in the sidebar and click 'Search GBIF' to begin")
+def show_results_section():
+    """Display and manage search results."""
+    st.subheader(f"🎯 Found {len(st.session_state.species_data)} species")
+    
+    # Post-search filters
+    with st.expander("🔧 Refine Results", expanded=False):
+        col1, col2, col3 = st.columns(3)
         
-    else:
-        # Display search results
-        st.success(f"Found {len(st.session_state.species_data)} species in the search area")
-
+        with col1:
+            min_records = st.number_input("Minimum records", min_value=1, value=1)
+        
+        with col2:
+            families = ['All'] + sorted(list(set(sp['family'] for sp in st.session_state.species_data)))
+            selected_family = st.selectbox("Filter by Family", families)
+        
+        with col3:
+            sort_by = st.selectbox("Sort by", ["Record Count", "Name", "Family"])
+        
+        # Apply filters
         filtered_data = st.session_state.species_data
         
-        # Apply rank filter if enabled and configured
-        if (filter_enabled and 
-            'rank_filter_settings' in st.session_state and 
-            st.session_state.rank_filter_settings.get('value')):
-            
-            settings = st.session_state.rank_filter_settings
-            
-            # Use optimized filtering
-            filtered_data, total_checked = filter_species_by_rank_optimized(
-                st.session_state.species_data,
-                settings['rank'],
-                settings['value'],
-                settings['fuzzy_threshold']
-            )
-            
-            st.info(f"""
-            🎯 **Filter Applied:** {len(filtered_data)} species in {settings['rank']}: {settings['value']}
-            (Checked {total_checked} species with {settings['fuzzy_threshold']}% match sensitivity)
-            """)
+        if min_records > 1:
+            filtered_data = [sp for sp in filtered_data if sp['count'] >= min_records]
         
-        # Prepare species options for multiselect based on filtered data
-        species_list_limited = filtered_data[:50]
-        species_options = [
-            f"{sp['name']} - {sp['family']} ({sp['count']} records){sp.get('status_flag', '')}"
-            for sp in species_list_limited
-        ]
-        st.session_state.species_options = species_options
+        if selected_family != 'All':
+            filtered_data = [sp for sp in filtered_data if sp['family'] == selected_family]
         
-        # Create tabs for different views
-        tab1, tab2, tab3 = st.tabs(["📊 Species List", "🗺️ Map View", "📄 Export"])
+        if sort_by == "Name":
+            filtered_data = sorted(filtered_data, key=lambda x: x['name'])
+        elif sort_by == "Family":
+            filtered_data = sorted(filtered_data, key=lambda x: (x['family'], x['name']))
+        else:  # Record Count
+            filtered_data = sorted(filtered_data, key=lambda x: x['count'], reverse=True)
+    
+    # Display results in tabs
+    tab1, tab2, tab3 = st.tabs(["📊 Table View", "🗺️ Map View", "📋 Analysis"])
+    
+    with tab1:
+        # Create DataFrame for display
+        df = pd.DataFrame(filtered_data)
+        df_display = df[['name', 'family', 'count']].copy()
+        df_display.columns = ['Species', 'Family', 'Records']
         
-        with tab1:
-            st.subheader("Species Found in Search Area")
-            
-            # Create DataFrame for display
-            df = pd.DataFrame(filtered_data)
-            df = df[df['name'].str.strip() != '']
-            df_display = df[['name', 'family', 'count']].copy()
-            df_display.columns = ['Species', 'Family', 'Records']
-            df_display = df_display.reset_index(drop=True)
-            df_display.index = range(1, len(df_display) + 1)
-            st.dataframe(df_display, use_container_width=True, height=300)
-            
-            # Selection controls
-            st.subheader("Select Species for Detailed Analysis")
-            
-            col1, col2, col3 = st.columns(3)
-            with col1:
-                if st.button("Select All", use_container_width=True):
-                    st.session_state.species_selector = st.session_state.species_options[:]
-                    st.rerun()
-            with col2:
-                if st.button("Clear Selection", use_container_width=True):
-                    st.session_state.species_selector = []
-                    st.session_state.selected_species = {}
-                    if 'analysis_data' in st.session_state:
-                        del st.session_state.analysis_data
-                    st.rerun()
-            with col3:
-                if st.button("Top 10", use_container_width=True):
-                    st.session_state.species_selector = st.session_state.species_options[:10]
-                    st.rerun()
-            
-            # Multiselect for species selection
-            selected_labels = st.multiselect(
-                "Select species:",
-                st.session_state.species_options,
-                key="species_selector",
-                format_func=lambda x: x
-            )
-            
-            # Map selected labels back to species names
-            selected_names = []
-            for label in selected_labels:
-                name = label.split(' - ')[0]
-                selected_names.append(name)
-            
-            st.session_state.selected_species = {name: True for name in selected_names}
-            
-            # Process selected species
-            if len(selected_names) > 0:
-                st.info(f"Selected {len(selected_names)} species for analysis")
-                
-                if st.button("📊 Generate Detailed Analysis", type="primary", use_container_width=True):
-                    selected_species_data = [
-                        sp for sp in filtered_data 
-                        if sp['name'] in selected_names
-                    ]
-                    # Augment with details (including hierarchy only if option enabled)
-                    augmented_data = []
-                    with st.spinner(f"Fetching details for {len(selected_species_data)} species..."):
-                        for sp in selected_species_data:
-                            photos, taxon_id, ancestors = get_species_details(
-                                sp['name'], 
-                                fetch_hierarchy=include_hierarchy
-                            )  # Respect option here
-                            sp_copy = sp.copy()
-                            sp_copy['hierarchy'] = ancestors if include_hierarchy else []
-                            sp_copy['photos'] = photos  # Always store if images enabled, but fetch anyway
-                            sp_copy['taxon_id'] = taxon_id
-                            augmented_data.append(sp_copy)
-                    st.session_state.analysis_data = augmented_data
-                    st.rerun()
-                
-                # Display detailed analysis if generated
-                if 'analysis_data' in st.session_state:
-                    # Ensure analysis_data is a valid list
-                    if isinstance(st.session_state.analysis_data, list) and len(st.session_state.analysis_data) > 0:
-                        st.subheader("🔍 Detailed Species Information")
-                        
-                        # Pagination setup
-                        page_size = 10
-                        total_pages = max(1, math.ceil(len(st.session_state.analysis_data) / page_size))
-                        
-                        # Create slider only if we have multiple pages
-                        if total_pages > 1:
-                            page = st.slider("Page", 1, total_pages, 1, key="detail_page")
-                            st.info(f"Showing page {page} of {total_pages}")
-                        else:
-                            page = 1
-                            st.info(f"Showing all {len(st.session_state.analysis_data)} species")
-                        
-                        start_idx = (page - 1) * page_size
-                        end_idx = min(start_idx + page_size, len(st.session_state.analysis_data))
-                        paginated_species = st.session_state.analysis_data[start_idx:end_idx]
-                        
-                        for species in paginated_species:
-                            with st.expander(f"📋 {species['name']} - {species['family']} ({species['count']} records)", expanded=True):
-                                
-                                # Use pre-fetched details if available
-                                if 'hierarchy' in species and species['hierarchy']:
-                                    ancestors = species['hierarchy']
-                                    photos = species.get('photos', [])
-                                    taxon_id = species.get('taxon_id')
-                                else:
-                                    # Fallback fetch if needed (e.g., hierarchy disabled but now enabled)
-                                    photos, taxon_id, ancestors = get_species_details(
-                                        species['name'], 
-                                        fetch_hierarchy=include_hierarchy
-                                    )
-
-                                if include_images:
-                                    col1, col2 = st.columns([3, 1])
-                                else:
-                                    col1 = st.columns([1])[0]
-                                
-                                with col1:
-                                    # Get local e-Flora description
-                                    success, description = get_local_eflora_description(
-                                        species['name'], st.session_state.eflora_data
-                                    )
-                                    
-                                    if success:
-                                        st.markdown(description)
-                                    else:
-                                        st.warning(f"No local description available")
-                                        st.markdown(f"**Scientific Name:** {species['name']}")
-                                        st.markdown(f"**Family:** {species['family']}")
-                                        st.markdown(f"**GBIF Records:** {species['count']}")
-
-                                    # Display hierarchy only if option enabled and available
-                                    if include_hierarchy and ancestors:
-                                        hierarchy_links = []
-                                        for anc in ancestors:
-                                            inat_link = f"https://www.inaturalist.org/taxa/{anc.get('id', '')}" if anc.get('id') else "#"
-                                            hierarchy_links.append(f"[{anc['name']} ({anc['rank']})]({inat_link})")
-                                        hierarchy_str = " > ".join(hierarchy_links)
-                                        st.markdown(f"**Taxonomic Hierarchy:** {hierarchy_str}")
-                                    elif include_hierarchy:
-                                        st.info("Taxonomic hierarchy could not be retrieved from iNaturalist.")
-
-                                if include_images:
-                                    with col2:
-                                        # Display iNaturalist images (using the 'photos' variable)
-                                        if photos:
-                                            st.markdown("**Photos from iNaturalist:**")
-                                            for img_data in photos[:3]:  # Limit to 3 images
-                                                try:
-                                                    response = requests.get(img_data['url'], headers=INAT_HEADERS, timeout=10)
-                                                    if response.status_code != 200:
-                                                        st.warning(f"Failed to load image (HTTP {response.status_code})")
-                                                        continue
-                                                    img = Image.open(io.BytesIO(response.content))
-                                                    st.image(img, caption=img_data['caption'], use_container_width=True)
-                                                    st.markdown(" ")
-                                                except Exception as e:
-                                                    st.warning(f"Failed to load image: {str(e)[:100]}")
-                                            
-                                            if taxon_id:
-                                                inat_link = f"https://www.inaturalist.org/taxa/{taxon_id}"
-                                                st.markdown(f"[View on iNaturalist ↗]({inat_link})")
-                                        else:
-                                            st.info("No photos available")
-                    else:
-                        # analysis_data exists but is empty or invalid
-                        st.warning("No species data available for analysis. Please select species and click 'Generate Detailed Analysis'.")
+        # Add selection column
+        df_display.insert(0, 'Select', False)
         
-        with tab2:
-            st.subheader("🗺️ Species Distribution Map")
-            if hasattr(st.session_state, 'all_records') and st.session_state.all_records:
-                species_map = create_species_map(
-                    st.session_state.all_records,
-                    st.session_state.species_data,
-                    latitude,
-                    longitude
+        # Display with selection
+        edited_df = st.data_editor(
+            df_display,
+            use_container_width=True,
+            hide_index=True,
+            column_config={
+                "Select": st.column_config.CheckboxColumn(
+                    "Select",
+                    help="Select species for detailed analysis",
+                    default=False,
                 )
-                st_folium(species_map, height=600, width=700)
-                st.info("🎯 Red marker = search center | Colored dots = species observations")
-            else:
-                st.warning("Map data not available")
+            }
+        )
         
-        with tab3:
-            st.subheader("📄 Export Data")
+        # Get selected species
+        selected_species = edited_df[edited_df['Select']]['Species'].tolist()
+        
+        if selected_species:
+            st.info(f"Selected {len(selected_species)} species")
             
-            # Use analysis_data if available, otherwise current selection
-            if 'analysis_data' in st.session_state and st.session_state.analysis_data and len(st.session_state.analysis_data) > 0:
-                selected_species_data = st.session_state.analysis_data
-            else:
-                selected_species_data = [
-                    sp for sp in filtered_data 
-                    if sp['name'] in st.session_state.selected_species
-                ]
+            if st.button("🔬 Analyze Selected Species", type="primary"):
+                analyze_selected_species(selected_species, filtered_data)
+    
+    with tab2:
+        # Map options
+        col1, col2 = st.columns([3, 1])
+        with col2:
+            use_clustering = st.checkbox("Use Clustering", value=True,
+                                        help="Group nearby points for better performance")
+        
+        # Display map
+        if st.session_state.all_records:
+            species_map = create_clustered_map(
+                st.session_state.all_records,
+                filtered_data[:20],  # Limit for performance
+                st.session_state.current_latitude if 'current_latitude' in st.session_state else -33.92,
+                st.session_state.current_longitude if 'current_longitude' in st.session_state else 18.42,
+                use_clustering=use_clustering
+            )
+            st_folium(species_map, height=600)
+    
+    with tab3:
+        if 'analysis_data' in st.session_state and st.session_state.analysis_data:
+            display_analysis_results()
+        else:
+            st.info("Select species in the Table View tab and click 'Analyze Selected Species'")
+
+def analyze_selected_species(selected_names: List[str], all_species_data: List[Dict]):
+    """Perform detailed analysis on selected species using parallel processing."""
+    with st.spinner(f"Analyzing {len(selected_names)} species in parallel..."):
+        # Get species data
+        selected_data = [sp for sp in all_species_data if sp['name'] in selected_names]
+        
+        # Fetch details in parallel
+        details = fetch_all_species_details_parallel(selected_names)
+        
+        # Combine data
+        for sp in selected_data:
+            if sp['name'] in details:
+                sp.update(details[sp['name']])
+        
+        st.session_state.analysis_data = selected_data
+        st.success(f"Analysis complete for {len(selected_data)} species!")
+        st.rerun()
+
+def display_analysis_results():
+    """Display detailed analysis results."""
+    for species in st.session_state.analysis_data:
+        with st.expander(f"🌿 {species['name']} - {species['family']}", expanded=False):
+            col1, col2 = st.columns([2, 1])
             
-            if selected_species_data:
-                if export_format == "JSON":
-                    # JSON export
-                    export_data = {
-                        "metadata": {
-                            "location": {"latitude": latitude, "longitude": longitude},
-                            "radius_km": radius_km,
-                            "taxon_searched": taxon_name,
-                            "selected_species_count": len(selected_species_data),
-                            "timestamp": datetime.now().isoformat()
-                        },
-                        "species": []
-                    }
-                    
-                    for species in selected_species_data:
-                        success, description = get_local_eflora_description(
-                            species['name'], st.session_state.eflora_data
-                        )
-                        
-                        export_data["species"].append({
-                            "name": species['name'],
-                            "family": species['family'],
-                            "gbif_count": species['count'],
-                            "hierarchy": species.get('hierarchy', []) if include_hierarchy else [],
-                            "description": description if success else "No description available"
-                        })
-                    
-                    json_str = json.dumps(export_data, indent=2)
-                    st.download_button(
-                        label="📥 Download JSON",
-                        data=json_str,
-                        file_name=f"botanical_data_{datetime.now().strftime('%Y%m%d_%H%M')}.json",
-                        mime="application/json",
-                        use_container_width=True
-                    )
-                    
-                    with st.expander("Preview JSON", expanded=True):
-                        create_copy_button(json_str, "JSON")
-                        st.json(export_data)
+            with col1:
+                # Display e-Flora description
+                success, description = get_local_eflora_description(
+                    species['name'], st.session_state.eflora_data
+                )
                 
+                if success:
+                    st.markdown(description)
                 else:
-                    # Markdown export
-                    markdown_parts = [
-                        f"# Botanical Identification Report",
-                        f"",
-                        f"**Location:** {latitude}, {longitude}",
-                        f"**Search Radius:** {radius_km} km",
-                        f"**Target Taxon:** {taxon_name}",
-                        f"**Generated:** {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}",
-                        f"**Selected Species:** {len(selected_species_data)}",
-                        f"",
-                        f"## Species Details",
-                        f""
-                    ]
-                    
-                    for species in selected_species_data:
-                        success, description = get_local_eflora_description(
-                            species['name'], st.session_state.eflora_data
-                        )
-                        
-                        # Add hierarchy to MD only if option enabled
-                        hierarchy_md = ""
-                        if include_hierarchy and species.get('hierarchy'):
-                            hierarchy_list = "\n".join([f"- [{anc['name']} ({anc['rank']})](https://www.inaturalist.org/taxa/{anc.get('id', '')})" for anc in species['hierarchy']])
-                            hierarchy_md = f"**Taxonomic Hierarchy:**\n{hierarchy_list}\n\n"
+                    st.info("No local description available")
+                
+                # Display hierarchy if available
+                if species.get('hierarchy'):
+                    hierarchy_str = " > ".join([f"{h['name']} ({h['rank']})" 
+                                              for h in species['hierarchy']])
+                    st.markdown(f"**Taxonomy:** {hierarchy_str}")
+            
+            with col2:
+                # Display photos if available
+                if species.get('photos'):
+                    for photo in species['photos'][:2]:
+                        st.image(photo['url'], 
+                               caption=f"© {photo['photographer']}",
+                               use_container_width=True)
 
-                        markdown_parts.extend([
-                            f"### {species['name']}",
-                            f"**Family:** {species['family']}",
-                            f"**GBIF Records:** {species['count']}",
-                            hierarchy_md,
-                            description if success else "No description available.",
-                            f"",
-                            "---",
-                            f""
-                        ])
-                    
-                    markdown_str = "\n".join(markdown_parts)
-                    
-                    st.download_button(
-                        label="📥 Download Markdown Report",
-                        data=markdown_str,
-                        file_name=f"botanical_report_{datetime.now().strftime('%Y%m%d_%H%M')}.md",
-                        mime="text/markdown",
-                        use_container_width=True
-                    )
-                    
-                    with st.expander("Preview Markdown", expanded=True):
-                        create_copy_button(markdown_str, "Markdown")
-                        st.markdown(markdown_str)
+def show_admin_page():
+    """Administrative functions page."""
+    st.title("⚙️ Admin & Diagnostics")
+    
+    tab1, tab2, tab3 = st.tabs(["📊 Data Status", "🗃️ Cache Management", "🔧 Diagnostics"])
+    
+    with tab1:
+        st.subheader("Data Status")
+        
+        if os.path.exists(VERSION_FILE):
+            with open(VERSION_FILE, 'r') as f:
+                version_info = json.load(f)
+            
+            col1, col2 = st.columns(2)
+            with col1:
+                st.metric("Data Version", version_info.get('version', 'Unknown'))
+                st.metric("Record Count", f"{version_info.get('record_count', 0):,}")
+            with col2:
+                st.metric("Processed Date", version_info.get('processed_date', 'Unknown')[:10])
+                st.metric("Source", "SANBI e-Flora")
+        else:
+            st.warning("No version information available. Run data preparation script.")
+        
+        if st.button("🔄 Check for Updates"):
+            st.info("Update checking not implemented in this version")
+    
+    with tab2:
+        st.subheader("Cache Management")
+        
+        # Calculate cache sizes
+        cache_dirs = ['gbif_cache', 'cache']
+        total_size = 0
+        
+        for cache_dir in cache_dirs:
+            if os.path.exists(cache_dir):
+                size = sum(os.path.getsize(os.path.join(cache_dir, f)) 
+                          for f in os.listdir(cache_dir))
+                total_size += size
+                st.metric(f"{cache_dir}", f"{size / 1024 / 1024:.2f} MB")
+        
+        if st.button("🗑️ Clear All Caches", type="secondary"):
+            import shutil
+            for cache_dir in cache_dirs:
+                if os.path.exists(cache_dir):
+                    shutil.rmtree(cache_dir)
+            st.success("All caches cleared!")
+            st.rerun()
+    
+    with tab3:
+        st.subheader("System Diagnostics")
+        
+        # Test e-Flora data
+        if st.button("Test e-Flora Data"):
+            data = load_prepared_data()
+            if data is not None:
+                st.success(f"✅ Successfully loaded {len(data)} taxa")
+                
+                # Show sample
+                st.write("Sample entries:")
+                st.dataframe(data.head())
             else:
-                st.warning("Please select species in the Species List tab first")
+                st.error("Failed to load e-Flora data")
+        
+        # Test API connectivity
+        if st.button("Test API Connectivity"):
+            test_results = test_api_connectivity()
+            for service, status in test_results.items():
+                if status:
+                    st.success(f"✅ {service}: Connected")
+                else:
+                    st.error(f"❌ {service}: Failed")
 
-    # Add footer
-    add_footer()
+# Helper functions (keep existing ones, add these)
+@st.cache_data(ttl=3600)
+def search_gbif_cached(latitude, longitude, radius_km, taxon_name):
+    """Cached GBIF search function."""
+    # Your existing get_species_list_from_gbif logic here
+    # Just rename it for clarity
+    pass
+
+def get_local_eflora_description(species_name, eflora_data):
+    """Get description from local e-Flora data."""
+    # Your existing implementation
+    pass
+
+def test_api_connectivity():
+    """Test connectivity to external APIs."""
+    import requests
+    
+    results = {}
+    
+    # Test GBIF
+    try:
+        response = requests.get("https://api.gbif.org/v1/", timeout=5)
+        results['GBIF API'] = response.status_code == 200
+    except:
+        results['GBIF API'] = False
+    
+    # Test iNaturalist
+    try:
+        response = requests.get("https://api.inaturalist.org/v1/", timeout=5)
+        results['iNaturalist API'] = response.status_code == 200
+    except:
+        results['iNaturalist API'] = False
+    
+    return results
+
+# Main app with navigation
+def main():
+    # Custom CSS for better UI
+    st.markdown("""
+    <style>
+    .stTabs [data-baseweb="tab-list"] {
+        gap: 24px;
+    }
+    .stTabs [data-baseweb="tab"] {
+        padding: 10px 20px;
+    }
+    </style>
+    """, unsafe_allow_html=True)
+    
+    # Top navigation
+    col1, col2, col3 = st.columns([6, 1, 1])
+    
+    with col1:
+        st.markdown("# 🌿 Botanical ID Workbench")
+    
+    with col2:
+        if st.button("🔍 Search", use_container_width=True):
+            st.session_state.page = 'search'
+            st.rerun()
+    
+    with col3:
+        if st.button("⚙️ Admin", use_container_width=True):
+            st.session_state.page = 'admin'
+            st.rerun()
+    
+    st.divider()
+    
+    # Display appropriate page
+    if st.session_state.page == 'admin':
+        show_admin_page()
+    else:
+        show_search_page()
 
 if __name__ == "__main__":
     main()
