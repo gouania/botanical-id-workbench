@@ -477,8 +477,6 @@ def render_advanced_filters():
 def display_export_options():
     """
     Renders download buttons for the analyzed species data in CSV and JSON formats.
-    This function reads directly from st.session_state.analysis_data, which is
-    prepared by the analyze_selected_species function.
     """
     st.header("📄 Export Data")
     
@@ -490,11 +488,11 @@ def display_export_options():
 
     st.info(f"Export options are available for the {len(analysis_data)} species you have analyzed.")
 
-    # --- Option 1: Export to CSV (Best for spreadsheets and simple data analysis) ---
+    # --- Option 1: Export to CSV ---
+    # This part is likely working correctly, but we'll keep it consistent.
     try:
         export_list = []
         for species in analysis_data:
-            # Create a simple, flat dictionary for each row in the CSV
             flat_species = {
                 'scientific_name': species.get('name'),
                 'family': species.get('family'),
@@ -520,15 +518,16 @@ def display_export_options():
     except Exception as e:
         st.error(f"Could not prepare CSV for download. Error: {e}")
 
-    # --- Option 2: Export to JSON (Best for programmatic use or detailed records) ---
+    # --- Option 2: Export to JSON (CORRECTED LOGIC) ---
     try:
-        # The full analysis_data is already well-structured for JSON.
-        # We just need to ensure it's JSON-serializable.
-        json_compatible_data = [
-            {k: (None if pd.isna(v) else v) for k, v in s.items()}
-            for s in analysis_data
-        ]
-        json_data = json.dumps(json_compatible_data, indent=2)
+        # The most robust way to handle complex data types for JSON export
+        # is to convert to a pandas DataFrame and use its built-in to_json method.
+        # This correctly handles NaNs, lists, and other objects.
+        df_for_json = pd.DataFrame(analysis_data)
+        
+        # orient='records' creates a JSON array of objects, which is what we want.
+        # indent=2 makes the output human-readable.
+        json_data = df_for_json.to_json(orient='records', indent=2)
 
         st.download_button(
             label="📥 Download as JSON",
