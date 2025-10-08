@@ -32,7 +32,7 @@ DATA_DIR = "prepared_data"
 PROCESSED_DATA_FILE = os.path.join(DATA_DIR, "eflora_processed.parquet")
 VERSION_FILE = os.path.join(DATA_DIR, "data_version.json")
 MAX_CONCURRENT_REQUESTS = 10
-DATA_URL = "://github.com/gouania/botanical-id-workbench/releases/download/v1.0.0-data/eflora_processed.parquet"
+DATA_URL = "https://github.com/gouania/botanical-id-workbench/releases/download/v1.0.0-data/eflora_processed.parquet"
 
 # Global headers for iNaturalist API requests
 INAT_HEADERS = {'User-Agent': 'BotanicalWorkbench/1.0'}
