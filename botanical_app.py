@@ -334,7 +334,6 @@ def analyze_selected_species(selected_names: List[str], all_species_data: List[D
         
         st.session_state.analysis_data = selected_data
         st.success("Analysis complete!")
-        st.rerun()
 
 def display_analysis_results():
     """Display detailed analysis results."""
