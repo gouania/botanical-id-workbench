@@ -241,6 +241,7 @@ def show_search_page():
                 st.session_state.analysis_data = None
                 st.session_state.discovered_ranks = None
                 st.session_state.selected_species_set = set()
+                st.session_state.analysis_complete = False
                 st.rerun()
     
     with col2:
@@ -331,9 +332,14 @@ def analyze_selected_species(selected_names: List[str], all_species_data: List[D
 
         for sp in selected_data:
             sp.update(details_map.get(sp['name'], {}))
+               # Fetch and add the local e-Flora description
+            success, description = get_local_eflora_description(sp.get('speciesKey'), st.session_state.eflora_data)
+            sp['eflora_description'] = description if success else "No local description found."
         
         st.session_state.analysis_data = selected_data
+        st.session_state.analysis_complete = True
         st.success("Analysis complete!")
+         st.rerun() # Put the rerun back
 
 def display_analysis_results():
     """Display detailed analysis results."""
@@ -469,12 +475,71 @@ def render_advanced_filters():
             st.session_state.rank_filter_settings = {'rank': selected_rank, 'value': selected_value} if selected_value else {}
 
 def display_export_options():
+    """
+    Renders download buttons for the analyzed species data in CSV and JSON formats.
+    This function reads directly from st.session_state.analysis_data, which is
+    prepared by the analyze_selected_species function.
+    """
     st.header("📄 Export Data")
-    if not st.session_state.get('analysis_data'):
-        st.warning("Please analyze species first to generate exportable data.")
+    
+    analysis_data = st.session_state.get('analysis_data')
+    
+    if not analysis_data:
+        st.warning("Please select species from the 'Table View' and click 'Analyze Selected Species' to generate exportable data.")
         return
-    # Export logic remains the same...
 
+    st.info(f"Export options are available for the {len(analysis_data)} species you have analyzed.")
+
+    # --- Option 1: Export to CSV (Best for spreadsheets and simple data analysis) ---
+    try:
+        export_list = []
+        for species in analysis_data:
+            # Create a simple, flat dictionary for each row in the CSV
+            flat_species = {
+                'scientific_name': species.get('name'),
+                'family': species.get('family'),
+                'gbif_usage_key': species.get('speciesKey'),
+                'inaturalist_taxon_id': species.get('taxon_id'),
+                'gbif_record_count': species.get('count'),
+                'eflora_description': species.get('eflora_description'),
+                'hierarchy_str': ' > '.join([h['name'] for h in species.get('hierarchy', [])]),
+                'photo_urls': ", ".join([p['url'] for p in species.get('photos', [])])
+            }
+            export_list.append(flat_species)
+        
+        df_export = pd.DataFrame(export_list)
+        csv_data = df_export.to_csv(index=False).encode('utf-8')
+
+        st.download_button(
+            label="📥 Download as CSV",
+            data=csv_data,
+            file_name=f"botanical_workbench_export_{datetime.now().strftime('%Y%m%d')}.csv",
+            mime="text/csv",
+            help="Download a spreadsheet-friendly CSV file with the core analysis data."
+        )
+    except Exception as e:
+        st.error(f"Could not prepare CSV for download. Error: {e}")
+
+    # --- Option 2: Export to JSON (Best for programmatic use or detailed records) ---
+    try:
+        # The full analysis_data is already well-structured for JSON.
+        # We just need to ensure it's JSON-serializable.
+        json_compatible_data = [
+            {k: (None if pd.isna(v) else v) for k, v in s.items()}
+            for s in analysis_data
+        ]
+        json_data = json.dumps(json_compatible_data, indent=2)
+
+        st.download_button(
+            label="📥 Download as JSON",
+            data=json_data,
+            file_name=f"botanical_workbench_export_{datetime.now().strftime('%Y%m%d')}.json",
+            mime="application/json",
+            help="Download the complete, detailed data including photo metadata and hierarchy objects."
+        )
+    except Exception as e:
+        st.error(f"Could not prepare JSON for download. Error: {e}")
+        
 def main():
     st.markdown("# 🌿 Botanical ID Workbench")
     st.divider()
