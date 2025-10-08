@@ -339,7 +339,7 @@ def analyze_selected_species(selected_names: List[str], all_species_data: List[D
         st.session_state.analysis_data = selected_data
         st.session_state.analysis_complete = True
         st.success("Analysis complete!")
-         st.rerun() # Put the rerun back
+        st.rerun() # Put the rerun back
 
 def display_analysis_results():
     """Display detailed analysis results."""
@@ -539,7 +539,7 @@ def display_export_options():
         )
     except Exception as e:
         st.error(f"Could not prepare JSON for download. Error: {e}")
-        
+
 def main():
     st.markdown("# 🌿 Botanical ID Workbench")
     st.divider()
